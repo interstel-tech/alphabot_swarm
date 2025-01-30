@@ -1,0 +1,11 @@
+# The .dsl and .json files in this folder are diagrams that can be viewed with Structurizr.
+# You can quickly install it via Docker with:
+docker pull structurizr/lite
+
+# Then, run the following command to start the Structurizr Lite GUI in the browser at http://localhost:8081
+# Make sure to change directories to this folder first.
+# Note, bash expands $(pwd) correctly, but CSH does not. Replace the $(pwd) manually if you need to to the full path of this folder. Alternatively, run in bash.
+docker run -it --rm -p 8081:8080 -v $(pwd):/usr/local/structurizr -e STRUCTURIZR_WORKSPACE_FILENAME=alphabot_swarm structurizr/lite
+
+
+# Alternatively, although the formatting will be lost, you can copy and paste the contents of the .dsl file into the free online viewer https://structurizr.com/dsl, then click on the Render button.

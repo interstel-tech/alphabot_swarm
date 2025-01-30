@@ -1,0 +1,560 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedAgent" : "structurizr-ui",
+  "lastModifiedDate" : "2025-01-30T02:16:05Z",
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "location" : "Unspecified",
+      "name" : "Swarm Operator",
+      "properties" : {
+        "structurizr.dsl.identifier" : "operator"
+      },
+      "relationships" : [ {
+        "description" : "Uses",
+        "destinationId" : "2",
+        "id" : "29",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "description" : "Service that acts as the swarm-awareness manager. Written in C++.",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "COSMOS Agent",
+        "properties" : {
+          "structurizr.dsl.identifier" : "mother_computer.cosmos_agent"
+        },
+        "relationships" : [ {
+          "description" : "Sends command to move to some specified position via PacketComm",
+          "destinationId" : "5",
+          "id" : "32",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Sends command to move to some specified position via PacketComm",
+          "destinationId" : "4",
+          "id" : "33",
+          "linkedRelationshipId" : "32",
+          "sourceId" : "3"
+        } ],
+        "tags" : "Element,Container"
+      } ],
+      "description" : "A powerful computer that issues formation commanding",
+      "documentation" : { },
+      "id" : "2",
+      "location" : "Unspecified",
+      "name" : "Mother Computer",
+      "properties" : {
+        "structurizr.dsl.identifier" : "mother_computer"
+      },
+      "relationships" : [ {
+        "description" : "Commands to move to desired position",
+        "destinationId" : "4",
+        "id" : "30",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Sends command to move to some specified position via PacketComm",
+        "destinationId" : "5",
+        "id" : "34",
+        "linkedRelationshipId" : "32",
+        "sourceId" : "2"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "containers" : [ {
+        "components" : [ {
+          "description" : "Outputs position, velocity, acceleration needed to achieve the desired formation",
+          "documentation" : { },
+          "id" : "6",
+          "name" : "Multi-Agent Coordinator (MAC)",
+          "properties" : {
+            "structurizr.dsl.identifier" : "alphabot.cosmos_agent.mac"
+          },
+          "relationships" : [ {
+            "description" : "Sends command to move to some specified position",
+            "destinationId" : "7",
+            "id" : "8",
+            "sourceId" : "6",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Manages communications with the Python service that controls the robot.",
+          "documentation" : { },
+          "id" : "7",
+          "name" : "Robot Manager",
+          "properties" : {
+            "structurizr.dsl.identifier" : "alphabot.cosmos_agent.robot_manager"
+          },
+          "relationships" : [ {
+            "description" : "Gives robot's reported position",
+            "destinationId" : "6",
+            "id" : "9",
+            "sourceId" : "7",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Sends command to move to some specified position",
+            "destinationId" : "12",
+            "id" : "20",
+            "sourceId" : "7",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Sends command to move to some specified position",
+            "destinationId" : "10",
+            "id" : "21",
+            "linkedRelationshipId" : "20",
+            "sourceId" : "7"
+          } ],
+          "tags" : "Element,Component"
+        } ],
+        "description" : "Service that acts as the swarm-awareness manager. Written in C++.",
+        "documentation" : { },
+        "id" : "5",
+        "name" : "COSMOS Agent",
+        "properties" : {
+          "structurizr.dsl.identifier" : "alphabot.cosmos_agent"
+        },
+        "relationships" : [ {
+          "description" : "Sends command to move to some specified position",
+          "destinationId" : "12",
+          "id" : "22",
+          "linkedRelationshipId" : "20",
+          "sourceId" : "5"
+        }, {
+          "description" : "Sends command to move to some specified position",
+          "destinationId" : "10",
+          "id" : "23",
+          "linkedRelationshipId" : "20",
+          "sourceId" : "5"
+        }, {
+          "description" : "Sends robot telemetry",
+          "destinationId" : "3",
+          "id" : "35",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Sends robot telemetry",
+          "destinationId" : "2",
+          "id" : "36",
+          "linkedRelationshipId" : "35",
+          "sourceId" : "5"
+        } ],
+        "tags" : "Element,Container"
+      }, {
+        "components" : [ {
+          "description" : "Manages the state and main functionalities required by the robot",
+          "documentation" : { },
+          "id" : "11",
+          "name" : "Robot Manager",
+          "properties" : {
+            "structurizr.dsl.identifier" : "alphabot.python_service.robot_manager"
+          },
+          "relationships" : [ {
+            "description" : "Commands to move to a specified location",
+            "destinationId" : "14",
+            "id" : "16",
+            "sourceId" : "11",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Informs about most recent positioning command",
+            "destinationId" : "13",
+            "id" : "17",
+            "sourceId" : "11",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Sends telemetry",
+            "destinationId" : "12",
+            "id" : "19",
+            "sourceId" : "11",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Manages the interfaces provided by the service for this robot",
+          "documentation" : { },
+          "id" : "12",
+          "name" : "API Manager",
+          "properties" : {
+            "structurizr.dsl.identifier" : "alphabot.python_service.api_manager"
+          },
+          "relationships" : [ {
+            "description" : "Relays incoming command",
+            "destinationId" : "11",
+            "id" : "15",
+            "sourceId" : "12",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Reports estimated position",
+            "destinationId" : "7",
+            "id" : "24",
+            "sourceId" : "12",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Reports estimated position",
+            "destinationId" : "5",
+            "id" : "25",
+            "linkedRelationshipId" : "24",
+            "sourceId" : "12"
+          } ],
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Provides estimates of the robot's position based on dead reckoning",
+          "documentation" : { },
+          "id" : "13",
+          "name" : "Position Estimator",
+          "properties" : {
+            "structurizr.dsl.identifier" : "alphabot.python_service.position_estimator"
+          },
+          "relationships" : [ {
+            "description" : "Reports estimated position",
+            "destinationId" : "11",
+            "id" : "18",
+            "sourceId" : "13",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Uses the robot's driver libraries to physically control the robot",
+          "documentation" : { },
+          "id" : "14",
+          "name" : "Driver Manager",
+          "properties" : {
+            "structurizr.dsl.identifier" : "alphabot.python_service.driver_manager"
+          },
+          "tags" : "Element,Component"
+        } ],
+        "description" : "Service that provides an interface for driving the robot. Written in Python.",
+        "documentation" : { },
+        "id" : "10",
+        "name" : "Robot Service",
+        "properties" : {
+          "structurizr.dsl.identifier" : "alphabot.python_service"
+        },
+        "relationships" : [ {
+          "description" : "Reports estimated position",
+          "destinationId" : "7",
+          "id" : "26",
+          "linkedRelationshipId" : "24",
+          "sourceId" : "10"
+        }, {
+          "description" : "Reports estimated position",
+          "destinationId" : "5",
+          "id" : "27",
+          "linkedRelationshipId" : "24",
+          "sourceId" : "10"
+        } ],
+        "tags" : "Element,Container"
+      } ],
+      "description" : "A mini-driving robot acting as a single node in the swarm",
+      "documentation" : { },
+      "group" : "Alphabot Swarm",
+      "id" : "4",
+      "location" : "Unspecified",
+      "name" : "Alphabot",
+      "properties" : {
+        "structurizr.dsl.identifier" : "alphabot"
+      },
+      "relationships" : [ {
+        "description" : "Reports current estimated position",
+        "destinationId" : "2",
+        "id" : "31",
+        "sourceId" : "4",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Sends robot telemetry",
+        "destinationId" : "3",
+        "id" : "37",
+        "linkedRelationshipId" : "35",
+        "sourceId" : "4"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "Nth node in the swarm",
+      "documentation" : { },
+      "group" : "Alphabot Swarm",
+      "id" : "28",
+      "location" : "Unspecified",
+      "name" : "Alphabot n",
+      "properties" : {
+        "structurizr.dsl.identifier" : "alphabot_n"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.dsl" : "d29ya3NwYWNlIHsKICAgIC8vIEFsbG93IHJlZmVyZW5jZSB0byBpZGVudGlmaWVkIHVzaW5nIC4gbm90YXRpb24KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwKCiAgICBtb2RlbCB7CiAgICAgICAgLy8gRW50aXRpZXMKICAgICAgICBvcGVyYXRvciA9IHBlcnNvbiAiU3dhcm0gT3BlcmF0b3IiCgogICAgICAgIG1vdGhlcl9jb21wdXRlciA9IHNvZnR3YXJlU3lzdGVtICJNb3RoZXIgQ29tcHV0ZXIiICJBIHBvd2VyZnVsIGNvbXB1dGVyIHRoYXQgaXNzdWVzIGZvcm1hdGlvbiBjb21tYW5kaW5nIiB7CiAgICAgICAgICAgIGNvc21vc19hZ2VudCA9IGNvbnRhaW5lciAiQ09TTU9TIEFnZW50IiAiU2VydmljZSB0aGF0IGFjdHMgYXMgdGhlIHN3YXJtLWF3YXJlbmVzcyBtYW5hZ2VyLiBXcml0dGVuIGluIEMrKy4iCiAgICAgICAgfQoKICAgICAgICBncm91cCAiQWxwaGFib3QgU3dhcm0iIHsKICAgICAgICAgICAgYWxwaGFib3QgPSBzb2Z0d2FyZVN5c3RlbSAiQWxwaGFib3QiICJBIG1pbmktZHJpdmluZyByb2JvdCBhY3RpbmcgYXMgYSBzaW5nbGUgbm9kZSBpbiB0aGUgc3dhcm0iIHsKICAgICAgICAgICAgICAgIGNvc21vc19hZ2VudCA9IGNvbnRhaW5lciAiQ09TTU9TIEFnZW50IiAiU2VydmljZSB0aGF0IGFjdHMgYXMgdGhlIHN3YXJtLWF3YXJlbmVzcyBtYW5hZ2VyLiBXcml0dGVuIGluIEMrKy4iIHsKICAgICAgICAgICAgICAgICAgICBtYWMgPSBjb21wb25lbnQgIk11bHRpLUFnZW50IENvb3JkaW5hdG9yIChNQUMpIiAiT3V0cHV0cyBwb3NpdGlvbiwgdmVsb2NpdHksIGFjY2VsZXJhdGlvbiBuZWVkZWQgdG8gYWNoaWV2ZSB0aGUgZGVzaXJlZCBmb3JtYXRpb24iCiAgICAgICAgICAgICAgICAgICAgcm9ib3RfbWFuYWdlciA9IGNvbXBvbmVudCAiUm9ib3QgTWFuYWdlciIgIk1hbmFnZXMgY29tbXVuaWNhdGlvbnMgd2l0aCB0aGUgUHl0aG9uIHNlcnZpY2UgdGhhdCBjb250cm9scyB0aGUgcm9ib3QuIgogICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgIC8vIFJlbGF0aW9ucwogICAgICAgICAgICAgICAgICAgIG1hYyAtPiByb2JvdF9tYW5hZ2VyICJTZW5kcyBjb21tYW5kIHRvIG1vdmUgdG8gc29tZSBzcGVjaWZpZWQgcG9zaXRpb24iCiAgICAgICAgICAgICAgICAgICAgcm9ib3RfbWFuYWdlciAtPiBtYWMgIkdpdmVzIHJvYm90J3MgcmVwb3J0ZWQgcG9zaXRpb24iCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBweXRob25fc2VydmljZSA9IGNvbnRhaW5lciAiUm9ib3QgU2VydmljZSIgIlNlcnZpY2UgdGhhdCBwcm92aWRlcyBhbiBpbnRlcmZhY2UgZm9yIGRyaXZpbmcgdGhlIHJvYm90LiBXcml0dGVuIGluIFB5dGhvbi4iIHsKICAgICAgICAgICAgICAgICAgICByb2JvdF9tYW5hZ2VyID0gY29tcG9uZW50ICJSb2JvdCBNYW5hZ2VyIiAiTWFuYWdlcyB0aGUgc3RhdGUgYW5kIG1haW4gZnVuY3Rpb25hbGl0aWVzIHJlcXVpcmVkIGJ5IHRoZSByb2JvdCIKICAgICAgICAgICAgICAgICAgICBhcGlfbWFuYWdlciA9IGNvbXBvbmVudCAiQVBJIE1hbmFnZXIiICJNYW5hZ2VzIHRoZSBpbnRlcmZhY2VzIHByb3ZpZGVkIGJ5IHRoZSBzZXJ2aWNlIGZvciB0aGlzIHJvYm90IgogICAgICAgICAgICAgICAgICAgIHBvc2l0aW9uX2VzdGltYXRvciA9IGNvbXBvbmVudCAiUG9zaXRpb24gRXN0aW1hdG9yIiAiUHJvdmlkZXMgZXN0aW1hdGVzIG9mIHRoZSByb2JvdCdzIHBvc2l0aW9uIGJhc2VkIG9uIGRlYWQgcmVja29uaW5nIgogICAgICAgICAgICAgICAgICAgIGRyaXZlcl9tYW5hZ2VyID0gY29tcG9uZW50ICJEcml2ZXIgTWFuYWdlciIgIlVzZXMgdGhlIHJvYm90J3MgZHJpdmVyIGxpYnJhcmllcyB0byBwaHlzaWNhbGx5IGNvbnRyb2wgdGhlIHJvYm90IgogICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgIC8vIFJlbGF0aW9ucwogICAgICAgICAgICAgICAgICAgIGFwaV9tYW5hZ2VyIC0+IHJvYm90X21hbmFnZXIgIlJlbGF5cyBpbmNvbWluZyBjb21tYW5kIgogICAgICAgICAgICAgICAgICAgIHJvYm90X21hbmFnZXIgLT4gZHJpdmVyX21hbmFnZXIgIkNvbW1hbmRzIHRvIG1vdmUgdG8gYSBzcGVjaWZpZWQgbG9jYXRpb24iCiAgICAgICAgICAgICAgICAgICAgcm9ib3RfbWFuYWdlciAtPiBwb3NpdGlvbl9lc3RpbWF0b3IgIkluZm9ybXMgYWJvdXQgbW9zdCByZWNlbnQgcG9zaXRpb25pbmcgY29tbWFuZCIKICAgICAgICAgICAgICAgICAgICBwb3NpdGlvbl9lc3RpbWF0b3IgLT4gcm9ib3RfbWFuYWdlciAiUmVwb3J0cyBlc3RpbWF0ZWQgcG9zaXRpb24iCiAgICAgICAgICAgICAgICAgICAgcm9ib3RfbWFuYWdlciAtPiBhcGlfbWFuYWdlciAiU2VuZHMgdGVsZW1ldHJ5IgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgLy8gUmVsYXRpb25zCiAgICAgICAgICAgICAgICBjb3Ntb3NfYWdlbnQucm9ib3RfbWFuYWdlciAtPiBweXRob25fc2VydmljZS5hcGlfbWFuYWdlciAiU2VuZHMgY29tbWFuZCB0byBtb3ZlIHRvIHNvbWUgc3BlY2lmaWVkIHBvc2l0aW9uIgogICAgICAgICAgICAgICAgcHl0aG9uX3NlcnZpY2UuYXBpX21hbmFnZXIgLT4gY29zbW9zX2FnZW50LnJvYm90X21hbmFnZXIgIlJlcG9ydHMgZXN0aW1hdGVkIHBvc2l0aW9uIgogICAgICAgICAgICB9CiAgICAgICAgICAgIGFscGhhYm90X24gPSBzb2Z0d2FyZVN5c3RlbSAiQWxwaGFib3QgbiIgIk50aCBub2RlIGluIHRoZSBzd2FybSIKICAgICAgICB9CiAgCiAgICAgICAgLy8gUmVsYXRpb25zCiAgICAgICAgb3BlcmF0b3IgLT4gbW90aGVyX2NvbXB1dGVyICJVc2VzIgogICAgICAgIG1vdGhlcl9jb21wdXRlciAtPiBhbHBoYWJvdCAiQ29tbWFuZHMgdG8gbW92ZSB0byBkZXNpcmVkIHBvc2l0aW9uIgogICAgICAgIGFscGhhYm90IC0+IG1vdGhlcl9jb21wdXRlciAiUmVwb3J0cyBjdXJyZW50IGVzdGltYXRlZCBwb3NpdGlvbiIKICAgICAgICBtb3RoZXJfY29tcHV0ZXIuY29zbW9zX2FnZW50IC0+IGFscGhhYm90LmNvc21vc19hZ2VudCAiU2VuZHMgY29tbWFuZCB0byBtb3ZlIHRvIHNvbWUgc3BlY2lmaWVkIHBvc2l0aW9uIHZpYSBQYWNrZXRDb21tIgogICAgICAgIGFscGhhYm90LmNvc21vc19hZ2VudCAtPiBtb3RoZXJfY29tcHV0ZXIuY29zbW9zX2FnZW50ICJTZW5kcyByb2JvdCB0ZWxlbWV0cnkiCgogICAgICAgIAogICAgfQoKICAgIHZpZXdzIHsKICAgICAgICBzeXN0ZW1MYW5kc2NhcGUgIk92ZXJhbGxTeXN0ZW0iIHsKICAgICAgICAgICAgaW5jbHVkZSAqCiAgICAgICAgfQogICAgICAgIGNvbnRhaW5lciBhbHBoYWJvdCAiQWxwaGFib3QiIHsKICAgICAgICAgICAgaW5jbHVkZSAqCiAgICAgICAgfQogICAgICAgIGNvbXBvbmVudCBhbHBoYWJvdC5jb3Ntb3NfYWdlbnQgIkNPU01PU19BZ2VudCIgewogICAgICAgICAgICBpbmNsdWRlICoKICAgICAgICB9CiAgICAgICAgY29tcG9uZW50IGFscGhhYm90LnB5dGhvbl9zZXJ2aWNlICJQeXRob25TZXJ2aWNlIiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgIH0KICAgICAgICBjb250YWluZXIgbW90aGVyX2NvbXB1dGVyICJNb3RoZXJDb21wdXRlciIgewogICAgICAgICAgICBpbmNsdWRlICoKICAgICAgICB9CiAgICAgICAgCiAgICAgICAgc3R5bGVzIHsKICAgICAgICAgICAgZWxlbWVudCAiU29mdHdhcmUgU3lzdGVtIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kIFN0ZWVsQmx1ZQogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkNvbnRhaW5lciIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCBMaWdodFN0ZWVsQmx1ZQogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlBlcnNvbiIgewogICAgICAgICAgICAgICAgc2hhcGUgcGVyc29uCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICB9CiAgICAKfQ=="
+  },
+  "views" : {
+    "componentViews" : [ {
+      "containerId" : "5",
+      "dimensions" : {
+        "height" : 1420,
+        "width" : 1858
+      },
+      "elements" : [ {
+        "id" : "6",
+        "x" : 1210,
+        "y" : 800
+      }, {
+        "id" : "7",
+        "x" : 329,
+        "y" : 800
+      }, {
+        "id" : "10",
+        "x" : 329,
+        "y" : 208
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "COSMOS_Agent",
+      "order" : 3,
+      "paperSize" : "A5_Landscape",
+      "relationships" : [ {
+        "id" : "21",
+        "vertices" : [ {
+          "x" : 704,
+          "y" : 658
+        } ]
+      }, {
+        "id" : "26",
+        "vertices" : [ {
+          "x" : 404,
+          "y" : 658
+        } ]
+      }, {
+        "id" : "8",
+        "vertices" : [ {
+          "x" : 929,
+          "y" : 808
+        } ]
+      }, {
+        "id" : "9",
+        "vertices" : [ {
+          "x" : 929,
+          "y" : 1108
+        } ]
+      } ]
+    }, {
+      "containerId" : "10",
+      "dimensions" : {
+        "height" : 2154,
+        "width" : 2708
+      },
+      "elements" : [ {
+        "id" : "5",
+        "x" : 1184,
+        "y" : 14
+      }, {
+        "id" : "11",
+        "x" : 1184,
+        "y" : 1094
+      }, {
+        "id" : "12",
+        "x" : 1184,
+        "y" : 514
+      }, {
+        "id" : "13",
+        "x" : 685,
+        "y" : 1670
+      }, {
+        "id" : "14",
+        "x" : 1649,
+        "y" : 1670
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "PythonService",
+      "order" : 4,
+      "relationships" : [ {
+        "id" : "15",
+        "vertices" : [ {
+          "x" : 1269,
+          "y" : 924
+        } ]
+      }, {
+        "id" : "16",
+        "vertices" : [ {
+          "x" : 1704,
+          "y" : 1444
+        } ]
+      }, {
+        "id" : "17",
+        "vertices" : [ {
+          "x" : 1004,
+          "y" : 1389
+        } ]
+      }, {
+        "id" : "18",
+        "vertices" : [ {
+          "x" : 1294,
+          "y" : 1524
+        } ]
+      }, {
+        "id" : "19",
+        "vertices" : [ {
+          "x" : 1624,
+          "y" : 969
+        } ]
+      }, {
+        "id" : "22",
+        "vertices" : [ {
+          "x" : 1280,
+          "y" : 405
+        } ]
+      }, {
+        "id" : "25",
+        "vertices" : [ {
+          "x" : 1595,
+          "y" : 410
+        } ]
+      } ]
+    } ],
+    "configuration" : {
+      "branding" : { },
+      "lastSavedView" : "PythonService",
+      "metadataSymbols" : "SquareBrackets",
+      "styles" : {
+        "elements" : [ {
+          "background" : "#4682b4",
+          "tag" : "Software System"
+        }, {
+          "background" : "#b0c4de",
+          "tag" : "Container"
+        }, {
+          "shape" : "Person",
+          "tag" : "Person"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "dimensions" : {
+        "height" : 1420,
+        "width" : 1858
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 1079,
+        "y" : 208
+      }, {
+        "id" : "5",
+        "x" : 1079,
+        "y" : 808
+      }, {
+        "id" : "10",
+        "x" : 329,
+        "y" : 808
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "Alphabot",
+      "order" : 2,
+      "paperSize" : "A5_Landscape",
+      "relationships" : [ {
+        "id" : "23",
+        "vertices" : [ {
+          "x" : 929,
+          "y" : 808
+        } ]
+      }, {
+        "id" : "27",
+        "vertices" : [ {
+          "x" : 929,
+          "y" : 1108
+        } ]
+      }, {
+        "id" : "34",
+        "vertices" : [ {
+          "x" : 1154,
+          "y" : 658
+        } ]
+      }, {
+        "id" : "36",
+        "vertices" : [ {
+          "x" : 1454,
+          "y" : 658
+        } ]
+      } ],
+      "softwareSystemId" : "4"
+    }, {
+      "dimensions" : {
+        "height" : 1420,
+        "width" : 1108
+      },
+      "elements" : [ {
+        "id" : "3",
+        "x" : 329,
+        "y" : 808
+      }, {
+        "id" : "4",
+        "x" : 329,
+        "y" : 208
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "MotherComputer",
+      "order" : 5,
+      "paperSize" : "A6_Portrait",
+      "relationships" : [ {
+        "id" : "33",
+        "vertices" : [ {
+          "x" : 704,
+          "y" : 658
+        } ]
+      }, {
+        "id" : "37",
+        "vertices" : [ {
+          "x" : 404,
+          "y" : 658
+        } ]
+      } ],
+      "softwareSystemId" : "2"
+    } ],
+    "systemLandscapeViews" : [ {
+      "dimensions" : {
+        "height" : 1432,
+        "width" : 1580
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 294,
+        "y" : 155
+      }, {
+        "id" : "2",
+        "x" : 859,
+        "y" : 205
+      }, {
+        "id" : "4",
+        "x" : 859,
+        "y" : 832
+      }, {
+        "id" : "28",
+        "x" : 269,
+        "y" : 832
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "OverallSystem",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "29"
+      }, {
+        "id" : "30",
+        "vertices" : [ {
+          "x" : 1229,
+          "y" : 687
+        } ]
+      }, {
+        "id" : "31",
+        "vertices" : [ {
+          "x" : 954,
+          "y" : 702
+        } ]
+      } ]
+    } ]
+  }
+}
