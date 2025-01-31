@@ -1,6 +1,10 @@
 import RPi.GPIO as GPIO
-from AlphaBot2 import AlphaBot2
 from sshkeyboard import listen_keyboard, stop_listening  # Added stop_listening for proper cleanup
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from AlphaBot2 import AlphaBot2
 
 Ab = AlphaBot2()
 
