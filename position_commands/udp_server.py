@@ -12,7 +12,7 @@ def receive_positions():
     while True:
         try:
             data, addr = server_socket.recvfrom(1024)  # Receive position update
-            print(f"Received position update from {addr}: {data.decode()}")
+            print(f"Received position update: {data.decode()}")
         except Exception as e:
             print(f"Error receiving position update: {e}")
 

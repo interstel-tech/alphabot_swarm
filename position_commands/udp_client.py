@@ -81,8 +81,8 @@ try:
             total_distance_travelled = distance_per_second * elapsed_time
 
             # Update position based on movement
-            x_position = total_distance_travelled * math.cos(math.radians(angle))
-            y_position = total_distance_travelled * math.sin(math.radians(angle))
+            x_position = total_distance_travelled * math.sin(math.radians(angle))
+            y_position = total_distance_travelled * math.cos(math.radians(angle))
 
             # Periodically send position updates
             if time.time() - last_report_time >= REPORT_INTERVAL:
