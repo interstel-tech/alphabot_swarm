@@ -21,6 +21,7 @@ try:
         # Read and decode data
         data = DWM.readline().decode("utf-8").strip()
 
+        print(data)
         if data and "POS" in data:  # Only process position data
             data = data.replace("\r\n", "").split(",")
 

@@ -6,7 +6,6 @@ import sys
 import os
 
 import serial
-import time
 import json
 import redis
 
@@ -16,8 +15,8 @@ from AlphaBot2 import AlphaBot2
 
 # Initialize AlphaBot2
 Ab = AlphaBot2()
-Ab.setPWMA(20)  # Set motor speed to 20%
-Ab.setPWMB(20)  # Set motor speed to 20%
+Ab.setPWMA(20)  # Set motor speed
+Ab.setPWMB(20)  # Set motor speed
 
 # UDP Client Configuration
 CLIENT_IP = "192.168.33.222"
@@ -42,20 +41,27 @@ time.sleep(1)
 
 print("Waiting for movement commands...")
 
-x_position = 0
-y_position = 0
-
-# Function to send periodic position updates
-def send_position_update():
-    global x_position, y_position
-    position_message = f"{x_position},{y_position}"
-    client_socket.sendto(position_message.encode(), (SERVER_IP, PORT))
-
+# Receive target position from UDP command BEFORE getting initial position
 data, addr = client_socket.recvfrom(1024)
-y, x = map(int, data.decode().split(","))  # Swapped x and y
-print(f"Received: x={x} cm, y={y} cm")
+y_target, x_target = map(float, data.decode().split(","))  # Swapped x and y
+print(f"Received Target: x={x_target} m, y={y_target} m")
 
-angle = math.degrees(math.atan2(x,y))
+# Retrieve initial position from UWB **after receiving the command**
+x_position, y_position = None, None
+while True:
+    data = DWM.readline().decode("utf-8").strip()
+    if "POS" in data:
+        parsed_data = data.replace("\r\n", "").split(",")
+        try:
+            x_position = float(parsed_data[parsed_data.index("POS") + 1])
+            y_position = float(parsed_data[parsed_data.index("POS") + 2])
+            print(f"Initial Position: x={x_position}, y={y_position}")
+            break  # Exit loop once we get the initial position
+        except (ValueError, IndexError):
+            print("Error parsing initial position, retrying...")
+
+# Calculate angle to turn based on initial position
+angle = math.degrees(math.atan2(y_target - y_position, x_target - x_position))
 print(f"Turning to {angle:.2f} degrees")
 
 if angle > 0:
@@ -63,44 +69,25 @@ if angle > 0:
 else:
     Ab.left()
 
-time.sleep(abs(angle)/360)
+time.sleep(abs(angle) / 360)  # Turning delay based on angle
 Ab.stop()
-time.sleep(1)
 
 try:
-    while x_position != x or y_position != y:
+    while abs(x_position - x_target) > 0.1 or abs(y_position - y_target) > 0.1:
         Ab.forward()
-        data = DWM.readline()
-        data = data.decode("utf-8").strip()
-        if data:
-            if "DIST" in data and "AN0" in data and "AN1" in data and "AN2" in data:
-                data = data.replace("\r\n", "").split(",")
-            
-            if "DIST" in data:
-                next_value = data[data.index("DIST") + 1]
-                if next_value.isdigit():
-                    anchor_Number = int(next_value)
-                    for i in range(anchor_Number):
-                        pos_AN = {
-                            "id": data[data.index("AN"+str(i))+1],
-                            "x": data[data.index("AN"+str(i))+2],
-                            "y": data[data.index("AN"+str(i))+3],
-                            "dist": data[data.index("AN"+str(i))+5]
-                        }
-                        pos_AN = json.dumps(pos_AN)
-                        r.set('AN'+str(i), pos_AN)
-                else:
-                    print(f"Unexpected value after 'DIST': {next_value}")
-
-            if "POS" in data:
-                pos = {
-                    "x": data[data.index("POS") + 1],
-                    "y": data[data.index("POS") + 2]
-                }
-                pos = json.dumps(pos)
-                print(pos)
+        
+        # Update position from UWB
+        data = DWM.readline().decode("utf-8").strip()
+        if "POS" in data:
+            parsed_data = data.replace("\r\n", "").split(",")
+            try:
+                x_position = float(parsed_data[parsed_data.index("POS") + 1])
+                y_position = float(parsed_data[parsed_data.index("POS") + 2])
+                print(f"Updated Position: x={x_position}, y={y_position}")
                 time.sleep(0.5)
-                r.set("pos", pos)
+            except (ValueError, IndexError):
+                print("Error parsing position update")
+
     Ab.stop()
     print("Movement complete")
 

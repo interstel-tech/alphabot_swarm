@@ -23,8 +23,8 @@ receiver_thread.start()
 try:
     while True:
         # Prompt user for movement commands
-        x = input("Enter movement in x (cm, positive for right, negative for left): ")
-        y = input("Enter movement in y (cm, positive for forward, negative for backward): ")
+        x = input("Enter movement in x (m, positive for right, negative for left): ")
+        y = input("Enter movement in y (m, positive for forward, negative for backward): ")
 
         # Convert input to a message
         message = f"{y},{x}".encode()  # Encode as "y,x"
@@ -32,7 +32,7 @@ try:
         # Send to the robot client
         robot_address = ('192.168.33.222', 12000)
         server_socket.sendto(message, robot_address)
-        print(f"Sent command: x={x} cm, y={y} cm")
+        print(f"Sent command: x={x} m, y={y} m")
 
 except KeyboardInterrupt:
     print("Server shutting down.")
