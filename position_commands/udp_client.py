@@ -74,7 +74,7 @@ time.sleep(abs(angle) / 360)  # Turning delay based on angle
 Ab.stop()
 
 try:
-    while abs(x_position - x_target) > 0.1 or abs(y_position - y_target) > 0.1:
+    while abs(x_position - x_target) > 0.1 and abs(y_position - y_target) > 0.1:
         Ab.forward()
         
         # Update position from UWB
