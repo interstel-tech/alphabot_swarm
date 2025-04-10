@@ -21,7 +21,6 @@ try:
         # Read and decode data
         data = DWM.readline().decode("utf-8").strip()
 
-        print(data)
         if data and "POS" in data:  # Only process position data
             data = data.replace("\r\n", "").split(",")
 
@@ -31,7 +30,7 @@ try:
             print(pos_json)  # Debugging output
             r.set("pos", pos_json)  # Store in Redis
 
-        time.sleep(0.5)  # Update every 0.5 seconds
+        time.sleep(0.1)  # Update every 0.1 seconds
 
 except KeyboardInterrupt:
     print("Stopping...")

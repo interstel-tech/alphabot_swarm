@@ -50,6 +50,7 @@ print(f"Received Target: x={x_target} m, y={y_target} m")
 x_position, y_position = None, None
 while True:
     data = DWM.readline().decode("utf-8").strip()
+    print(data)
     if "POS" in data:
         parsed_data = data.replace("\r\n", "").split(",")
         try:
@@ -84,7 +85,7 @@ try:
                 x_position = float(parsed_data[parsed_data.index("POS") + 1])
                 y_position = float(parsed_data[parsed_data.index("POS") + 2])
                 print(f"Updated Position: x={x_position}, y={y_position}")
-                time.sleep(0.5)
+                time.sleep(0.1)
             except (ValueError, IndexError):
                 print("Error parsing position update")
 
