@@ -1,5 +1,6 @@
 import time
 import math
+import numpy as np
 import hid
 
 # CP2112 HID driver
@@ -46,15 +47,6 @@ def initialize_icm20948(driver, addr):
     time.sleep(0.01)
     print("✅ IMU initialized")
 
-def read_accel(driver, addr):
-    ax = read_word(driver, addr, 0x31, 0x32)
-    ay = read_word(driver, addr, 0x2F, 0x30)
-    az = read_word(driver, addr, 0x2D, 0x2E)
-    return {"x": ax, "y": ay, "z": az}
-
-def read_gyro_x(driver, addr):
-    return read_word(driver, addr, 0x33, 0x34)
-
 def read_word(driver, addr, high_reg, low_reg):
     high = driver.read_byte_data(addr, high_reg)
     low = driver.read_byte_data(addr, low_reg)
@@ -65,6 +57,15 @@ def read_word(driver, addr, high_reg, low_reg):
         raw = -((65535 - raw) + 1)
     return raw
 
+def read_accel(driver, addr):
+    ax = read_word(driver, addr, 0x31, 0x32)
+    ay = read_word(driver, addr, 0x2F, 0x30)
+    az = read_word(driver, addr, 0x2D, 0x2E)
+    return {"x": ax, "y": ay, "z": az}
+
+def read_gyro_x(driver, addr):
+    return read_word(driver, addr, 0x33, 0x34)
+
 def convert_units(ax_raw, ay_raw, az_raw, gx_raw):
     ACCEL_SCALE = 16384.0
     GYRO_SCALE = 131.0
@@ -73,11 +74,27 @@ def convert_units(ax_raw, ay_raw, az_raw, gx_raw):
     ax = (ax_raw / ACCEL_SCALE) * GRAVITY
     ay = (ay_raw / ACCEL_SCALE) * GRAVITY
     az = (az_raw / ACCEL_SCALE) * GRAVITY
-    gx = gx_raw / GYRO_SCALE + 1.1
+    gx = gx_raw / GYRO_SCALE
     return ax, ay, az, gx
 
-def select_user_bank(driver, imu_address, bank):
-    driver.write_byte_data(imu_address, 0x7F, bank << 4)
+def compensate_gravity(ax, ay, az):
+    # Compute roll and pitch
+    roll = math.atan2(ay, az)
+    pitch = math.atan2(-ax, math.sqrt(ay**2 + az**2))
+
+    # Build rotation matrix from body to world frame
+    R = np.array([
+        [math.cos(pitch), math.sin(pitch) * math.sin(roll), math.sin(pitch) * math.cos(roll)],
+        [0,               math.cos(roll),                  -math.sin(roll)],
+        [-math.sin(pitch), math.cos(pitch) * math.sin(roll), math.cos(pitch) * math.cos(roll)]
+    ])
+
+    a_body = np.array([[ax], [ay], [az]])
+    a_world = R.T @ a_body  # Transform to world frame
+
+    ax_world = a_world[0, 0]
+    ay_world = a_world[1, 0]
+    return ax_world, ay_world, math.degrees(pitch), math.degrees(roll)
 
 # Main
 if __name__ == "__main__":
@@ -85,8 +102,8 @@ if __name__ == "__main__":
     imu_addr = 0x69
     initialize_icm20948(d, imu_addr)
 
-    velocity = {"x": 0.0, "y": 0.0, "z": 0.0}
-    position = {"x": 0.0, "y": 0.0, "z": 0.0}
+    velocity = {"x": 0.0, "y": 0.0}
+    position = {"x": 0.0, "y": 0.0}
     angle_x = 0.0
 
     last_time = time.time()
@@ -102,22 +119,23 @@ if __name__ == "__main__":
 
             if accel_raw["x"] is not None and gyro_raw is not None:
                 ax, ay, az, gx = convert_units(accel_raw["x"], accel_raw["y"], accel_raw["z"], gyro_raw)
+                ax_corr, ay_corr, pitch, roll = compensate_gravity(ax, ay, az)
 
-                # integrate angle
+                # Integrate gyroscope
                 angle_x += gx * dt
 
-                # integrate acceleration to velocity
-                velocity["x"] += ax * dt
-                velocity["y"] += ay * dt
-                velocity["z"] += az * dt
+                # Integrate acceleration to velocity
+                velocity["x"] += ax_corr * dt
+                velocity["y"] += ay_corr * dt
 
-                # integrate velocity to position
+                # Integrate velocity to position
                 position["x"] += velocity["x"] * dt
                 position["y"] += velocity["y"] * dt
-                position["z"] += velocity["z"] * dt
 
-                print(f"Accel (m/s²): X: {ax:.2f}, Y: {ay:.2f},  Z: {az:.2f}")
+                print(f"Accel (m/s²): X_raw: {ax:.2f}, Y_raw: {ay:.2f}, Z: {az:.2f}")
+                print(f"Accel (m/s²) Corrected: X: {ax_corr:.2f}, Y: {ay_corr:.2f}")
                 print(f"Gyro  (°/s):  X: {gx:.2f}")
+                print(f"Pitch: {pitch:.2f}°, Roll: {roll:.2f}°")
                 print(f"Position Estimate (m): X: {position['x']:.2f}, Y: {position['y']:.2f}")
                 print(f"Orientation Estimate (°): {angle_x:.2f}")
                 print("-" * 60)
