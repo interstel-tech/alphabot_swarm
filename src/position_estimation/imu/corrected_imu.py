@@ -143,5 +143,5 @@ if __name__ == "__main__":
                 print("⚠️ Failed to read sensor data")
             time.sleep(0.05)
     except KeyboardInterrupt:
-        print("\nExiting...")
+        print("\nExiting.")
         d.h.close()
