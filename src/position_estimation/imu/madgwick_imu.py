@@ -48,6 +48,23 @@ def initialize_icm20948(driver, addr):
     time.sleep(0.01)
     print("✅ IMU initialized")
 
+def calibrate_bias(driver, addr, samples=100):
+    print("Calibrating accelerometer bias...")
+    sum_ax, sum_ay, sum_az = 0, 0, 0
+    for _ in range(samples):
+        data = read_accel(driver, addr)
+        sum_ax += data["x"]
+        sum_ay += data["y"]
+        sum_az += data["z"]
+        time.sleep(0.01)
+    bias = {
+        "x": sum_ax / samples,
+        "y": sum_ay / samples,
+        "z": (sum_az / samples) - 16384  # account for 1g
+    }
+    print("✅ Bias calibrated:", bias)
+    return bias
+
 def read_accel(driver, addr):
     ax = read_word(driver, addr, 0x31, 0x32)
     ay = read_word(driver, addr, 0x2F, 0x30)
@@ -75,17 +92,18 @@ def convert_units(ax_raw, ay_raw, az_raw, gx_raw):
     ax = (ax_raw / ACCEL_SCALE) * GRAVITY
     ay = (ay_raw / ACCEL_SCALE) * GRAVITY
     az = (az_raw / ACCEL_SCALE) * GRAVITY
-    gx = math.radians(gx_raw / GYRO_SCALE + 1.1)  # degrees/sec → radians/sec
+    gx = math.radians(gx_raw / GYRO_SCALE + 1.1)
     return ax, ay, az, gx
 
-# Main script
+# Main
 if __name__ == "__main__":
     d = HIDDriver()
     imu_addr = 0x69
     initialize_icm20948(d, imu_addr)
+    bias = calibrate_bias(d, imu_addr)
 
     madgwick = Madgwick()
-    orientation = np.array([1.0, 0.0, 0.0, 0.0])  # w, x, y, z
+    orientation = np.array([1.0, 0.0, 0.0, 0.0])
     velocity = np.zeros(3)
     position = np.zeros(3)
 
@@ -101,27 +119,33 @@ if __name__ == "__main__":
             gyro_raw = read_gyro_x(d, imu_addr)
 
             if accel_raw["x"] is not None and gyro_raw is not None:
-                ax, ay, az, gx = convert_units(
-                    accel_raw["x"], accel_raw["y"], accel_raw["z"], gyro_raw)
+                ax_raw = accel_raw["x"] - bias["x"]
+                ay_raw = accel_raw["y"] - bias["y"]
+                az_raw = accel_raw["z"] - bias["z"]
+                ax, ay, az, gx = convert_units(ax_raw, ay_raw, az_raw, gyro_raw)
 
-                accel = np.array([ax, ay, az]) / 9.81  # to g
-                gyro = np.array([0.0, gx, 0.0])        # only x-axis gyro for now
+                accel = np.array([ax, ay, az]) / 9.81
+                gyro = np.array([0.0, gx, 0.0])
 
-                # Update orientation quaternion
                 orientation = madgwick.updateIMU(orientation, gyr=gyro, acc=accel)
-
-                # Convert quaternion to rotation matrix
                 q = orientation
+
                 R = np.array([
                     [1 - 2*(q[2]**2 + q[3]**2),     2*(q[1]*q[2] - q[3]*q[0]),     2*(q[1]*q[3] + q[2]*q[0])],
                     [    2*(q[1]*q[2] + q[3]*q[0]), 1 - 2*(q[1]**2 + q[3]**2),     2*(q[2]*q[3] - q[1]*q[0])],
                     [    2*(q[1]*q[3] - q[2]*q[0]),     2*(q[2]*q[3] + q[1]*q[0]), 1 - 2*(q[1]**2 + q[2]**2)]
                 ])
 
-                # Rotate accel to world frame, then subtract gravity
                 world_accel = R @ (accel * 9.81) - np.array([0.0, 0.0, 9.81])
 
-                # Integrate to velocity and position
+                # Apply friction damping if nearly stationary
+                if np.linalg.norm(world_accel) < 0.1:
+                    velocity *= 0.9  # or set to 0 with ZUPT if needed
+
+                # Optional: force velocity to zero if completely still
+                # if np.allclose(world_accel, [0.0, 0.0, 0.0], atol=0.1):
+                #     velocity[:] = 0
+
                 velocity += world_accel * dt
                 position += velocity * dt
 
@@ -130,6 +154,7 @@ if __name__ == "__main__":
                 print(f"Position (m):       {position}")
                 print(f"Orientation (quat): {orientation}")
                 print("-" * 60)
+
             else:
                 print("⚠️ Failed to read sensor data")
 
