@@ -6,6 +6,7 @@ import hid
 import numpy as np
 from filterpy.kalman import ExtendedKalmanFilter
 
+# --- HID Driver Class ---
 class HIDDriver:
     def __init__(self, *, serial=None):
         self.h = hid.device()
@@ -33,6 +34,7 @@ class HIDDriver:
         self.h.write([0x14, address << 1, 0x02, register, value])
         time.sleep(0.01)
 
+# --- Sensor Helpers ---
 def read_word(driver, addr, high_reg, low_reg):
     high = driver.read_byte_data(addr, high_reg)
     low = driver.read_byte_data(addr, low_reg)
@@ -52,24 +54,41 @@ def read_gyro(driver, addr):
     return {
         "x": read_word(driver, addr, 0x37, 0x38),
         "y": read_word(driver, addr, 0x35, 0x36),
-        "z": read_word(driver, addr, 0x33, 0x34)  # <-- Z-axis used for yaw
+        "z": read_word(driver, addr, 0x33, 0x34)
     }
 
 def convert_units(accel_raw, gyro_raw):
     ACCEL_SCALE = 16384.0
-    GYRO_SCALE = 131.0  # deg/s
+    GYRO_SCALE = 131.0
     GRAVITY = 9.80665
     ax = (accel_raw["x"] / ACCEL_SCALE) * GRAVITY
     ay = (accel_raw["y"] / ACCEL_SCALE) * GRAVITY
     az = (accel_raw["z"] / ACCEL_SCALE) * GRAVITY
     gx = math.radians(gyro_raw["x"] / GYRO_SCALE) 
     gy = math.radians(gyro_raw["y"] / GYRO_SCALE)
-    gz = math.radians(gyro_raw["z"] / GYRO_SCALE + 1.1) 
+    gz = math.radians(gyro_raw["z"] / GYRO_SCALE + 1.1)
     return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
-def hx(x): return x[:2]
-def HJacobian_at(x): return np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
+# --- EKF Functions ---
+def state_transition(x, dt):
+    x_pos, y_pos, v_forward, yaw = x
+    x_pos += v_forward * math.cos(yaw) * dt
+    y_pos += v_forward * math.sin(yaw) * dt
+    return np.array([x_pos, y_pos, v_forward, yaw])
 
+def jacobian_F(x, dt):
+    _, _, v_forward, yaw = x
+    return np.array([
+        [1, 0, math.cos(yaw)*dt, -v_forward * math.sin(yaw) * dt],
+        [0, 1, math.sin(yaw)*dt,  v_forward * math.cos(yaw) * dt],
+        [0, 0, 1,                0],
+        [0, 0, 0,                1]
+    ])
+
+def measurement_function(x): return x[:2]
+def jacobian_H(x): return np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
+
+# --- Main Loop ---
 if __name__ == "__main__":
     r = redis.Redis(host='localhost', port=6379, db=0)
     DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200)
@@ -101,34 +120,37 @@ if __name__ == "__main__":
 
             accel_raw = read_accel(d, imu_addr)
             gyro_raw = read_gyro(d, imu_addr)
-
             if None in accel_raw.values() or None in gyro_raw.values():
                 continue
 
             acc, gyr = convert_units(accel_raw, gyro_raw)
 
-            # Integrate Z gyro (yaw)
+            # Update yaw angle
             yaw += gyr[2] * dt
             yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
-            yaw_deg = math.degrees(yaw)
 
-            ekf.F = np.eye(4)
-            ekf.F[0, 2] = dt
-            ekf.F[1, 3] = dt
+            # Estimate forward velocity from x-acceleration in body frame
+            forward_acc = acc[0]
+            ekf.x[2] += forward_acc * dt  # integrate acceleration to velocity
+            ekf.x[3] = yaw  # update yaw in state
+
+            # Predict using nonlinear motion model
+            ekf.x = state_transition(ekf.x, dt)
+            ekf.F = jacobian_F(ekf.x, dt)
             ekf.predict()
 
+            # UWB Update
             data = DWM.readline().decode("utf-8").strip()
             if "POS" in data:
                 try:
                     parts = data.split(",")
                     x = float(parts[parts.index("POS")+1])
                     y = float(parts[parts.index("POS")+2])
-                    ekf.update(np.array([x, y]), HJacobian_at, hx)
+                    ekf.update(np.array([x, y]), jacobian_H, measurement_function)
                 except Exception as e:
                     print("⚠️ UWB Parse Error:", e)
 
-            print(f"Fused x: {ekf.x[0]:.2f}, y: {ekf.x[1]:.2f}, θ (yaw): {yaw_deg:.2f}°")
-            time.sleep(0.1)
+            print(f"Fused x: {ekf.x[0]:.2f}, y: {ekf.x[1]:.2f}, θ: {math.degrees(yaw):.2f}°")
 
     except KeyboardInterrupt:
         print("Stopping...")
