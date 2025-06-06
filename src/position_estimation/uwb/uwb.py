@@ -30,8 +30,6 @@ try:
             print(pos_json)  # Debugging output
             r.set("pos", pos_json)  # Store in Redis
 
-        time.sleep(0.1)  # Update every 0.1 seconds
-
 except KeyboardInterrupt:
     print("Stopping...")
     DWM.write("\r".encode())
