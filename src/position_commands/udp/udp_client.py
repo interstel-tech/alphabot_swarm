@@ -19,7 +19,7 @@ Ab.setPWMA(20)  # Set motor speed
 Ab.setPWMB(20)  # Set motor speed
 
 # UDP Client Configuration
-CLIENT_IP = "192.168.33.227"
+CLIENT_IP = "192.168.33.228"
 SERVER_IP = "192.168.33.249"
 PORT = 12000
 

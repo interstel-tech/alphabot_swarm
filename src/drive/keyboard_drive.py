@@ -1,17 +1,21 @@
-import RPi.GPIO as GPIO
-from sshkeyboard import listen_keyboard, stop_listening  # Added stop_listening for proper cleanup
 import sys
 import os
+import tty
+import termios
+import select
+import RPi.GPIO as GPIO
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from AlphaBot2 import AlphaBot2
 
 Ab = AlphaBot2()
-
-Ab.setPWMA(20) # Set motor speed to 20%
-Ab.setPWMB(20) # Set motor speed to 20%
+Ab.setPWMA(20)
+Ab.setPWMB(20)
 
 BUZ = 4
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(BUZ, GPIO.OUT)
 
 def beep_on():
     GPIO.output(BUZ, GPIO.HIGH)
@@ -19,43 +23,56 @@ def beep_on():
 def beep_off():
     GPIO.output(BUZ, GPIO.LOW)
 
-# GPIO setup
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-GPIO.setup(BUZ, GPIO.OUT)
+def get_key(timeout=0.1):
+    """Reads a single keypress with optional timeout."""
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        rlist, _, _ = select.select([fd], [], [], timeout)
+        if rlist:
+            return sys.stdin.read(1)
+        return None
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-# Function to handle keypress events
-def press_key(key):
-    if key == "w":  # Forward
-        Ab.forward()
-        print("Moving forward")
-    elif key == "a":  # Left
-        Ab.left()
-        print("Turning left")
-    elif key == "s":  # Backward
-        Ab.backward()
-        print("Moving backward")
-    elif key == "d":  # Right
-        Ab.right()
-        print("Turning right")
-    elif key == "q":  # Quit
-        print("Exiting...")
-        stop_listening()  # Stop the keyboard listener gracefully
+print("Control the AlphaBot using WASD keys. Press 'q' to quit.")
+print("Press and hold keys for continuous movement.")
 
-# Function to handle key release events
-def release_key(key):
-    if key in ["w", "a", "s", "d"]:  # Only stop for movement keys
-        Ab.stop()
-        print(f"Stopped movement for key: {key}")
-
-print("Control the AlphaBot using WASD keys. Press 'Q' to quit.")
-print("Listening for key events...")
+active_key = None
 
 try:
-    # Start listening for keypress and release events
-    listen_keyboard(on_press=press_key, on_release=release_key)
+    while True:
+        key = get_key()
+
+        if key is not None:
+            if key == active_key:
+                continue  # ignore key repeat
+            active_key = key
+
+            if key == "w":
+                Ab.forward()
+                print("Moving forward")
+            elif key == "a":
+                Ab.left()
+                print("Turning left")
+            elif key == "s":
+                Ab.backward()
+                print("Moving backward")
+            elif key == "d":
+                Ab.right()
+                print("Turning right")
+            elif key == "q":
+                print("Quitting...")
+                break
+        else:
+            if active_key in ["w", "a", "s", "d"]:
+                Ab.stop()
+                print(f"Stopped movement for key: {active_key}")
+            active_key = None
+
 except KeyboardInterrupt:
-    print("Program interrupted")
+    print("Interrupted by user.")
 finally:
-    GPIO.cleanup()  # Ensure GPIO pins are reset
-    print("GPIO cleanup completed.")
+    GPIO.cleanup()
+    print("GPIO cleaned up.")

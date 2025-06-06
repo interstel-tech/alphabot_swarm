@@ -66,7 +66,7 @@ def convert_units(accel_raw, gyro_raw):
     az = (accel_raw["z"] / ACCEL_SCALE) * GRAVITY
     gx = math.radians(gyro_raw["x"] / GYRO_SCALE) 
     gy = math.radians(gyro_raw["y"] / GYRO_SCALE)
-    gz = math.radians(gyro_raw["z"] / GYRO_SCALE + 1.1)
+    gz = -(math.radians(gyro_raw["z"] / GYRO_SCALE))
     return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
 # --- EKF Functions ---
