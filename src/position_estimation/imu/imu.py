@@ -71,9 +71,9 @@ def initialize_icm20948(driver, addr):
 def read_acceleration(driver, imu_address):
     # ACCEL_XOUT_H = 0x2D
     registers = {
-        "accel_x": (0x2D, 0x2E),
+        "accel_x": (0x31, 0x32),
         "accel_y": (0x2F, 0x30),
-        "accel_z": (0x31, 0x32)
+        "accel_z": (0x2D, 0x2E)
     }
 
     accel_data = {}

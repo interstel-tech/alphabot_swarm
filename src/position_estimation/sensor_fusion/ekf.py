@@ -1,14 +1,11 @@
-import serial
 import time
-import json
-import redis
 import math
+import serial
+import redis
 import hid
 import numpy as np
-from ahrs.filters import Madgwick
 from filterpy.kalman import ExtendedKalmanFilter
 
-# ---------------- HID DRIVER ----------------
 class HIDDriver:
     def __init__(self, *, serial=None):
         self.h = hid.device()
@@ -36,7 +33,6 @@ class HIDDriver:
         self.h.write([0x14, address << 1, 0x02, register, value])
         time.sleep(0.01)
 
-# ---------------- SENSOR HELPERS ----------------
 def read_word(driver, addr, high_reg, low_reg):
     high = driver.read_byte_data(addr, high_reg)
     low = driver.read_byte_data(addr, low_reg)
@@ -52,61 +48,49 @@ def read_accel(driver, addr):
         "z": read_word(driver, addr, 0x2D, 0x2E)
     }
 
-def read_gyro_x(driver, addr):
-    return read_word(driver, addr, 0x33, 0x34)
+def read_gyro(driver, addr):
+    return {
+        "x": read_word(driver, addr, 0x37, 0x38),
+        "y": read_word(driver, addr, 0x35, 0x36),
+        "z": read_word(driver, addr, 0x33, 0x34)  # <-- Z-axis used for yaw
+    }
 
-def convert_units(ax_raw, ay_raw, az_raw, gx_raw):
+def convert_units(accel_raw, gyro_raw):
     ACCEL_SCALE = 16384.0
-    GYRO_SCALE = 131.0
+    GYRO_SCALE = 131.0  # deg/s
     GRAVITY = 9.80665
-    ax = (ax_raw / ACCEL_SCALE) * GRAVITY
-    ay = (ay_raw / ACCEL_SCALE) * GRAVITY
-    az = (az_raw / ACCEL_SCALE) * GRAVITY
-    gx = math.radians(gx_raw / GYRO_SCALE + 1.1)
-    return ax, ay, az, gx
+    ax = (accel_raw["x"] / ACCEL_SCALE) * GRAVITY
+    ay = (accel_raw["y"] / ACCEL_SCALE) * GRAVITY
+    az = (accel_raw["z"] / ACCEL_SCALE) * GRAVITY
+    gx = math.radians(gyro_raw["x"] / GYRO_SCALE) 
+    gy = math.radians(gyro_raw["y"] / GYRO_SCALE)
+    gz = math.radians(gyro_raw["z"] / GYRO_SCALE + 1.1) 
+    return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
-# ---------------- EKF FUNCTIONS ----------------
-def fx(x, dt):
-    F = np.eye(4)
-    F[0, 2] = dt
-    F[1, 3] = dt
-    return F @ x
+def hx(x): return x[:2]
+def HJacobian_at(x): return np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
 
-def hx(x):
-    return x[:2]
-
-def HJacobian_at(x):
-    return np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
-
-# ---------------- MAIN ----------------
 if __name__ == "__main__":
-    # Redis and Serial
     r = redis.Redis(host='localhost', port=6379, db=0)
     DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200)
     print("Connected to " + DWM.name)
-    DWM.write("\r\r".encode())
+    DWM.write(b"\r\r")
     time.sleep(1)
-    DWM.write("lec\r".encode())
+    DWM.write(b"lec\r")
     time.sleep(1)
 
-    # IMU
     d = HIDDriver()
     imu_addr = 0x69
     d.write_byte_data(imu_addr, 0x06, 0x01)
-    time.sleep(0.01)
     d.write_byte_data(imu_addr, 0x3F, 0x00)
-    time.sleep(0.01)
 
-    madgwick = Madgwick()
-    orientation = np.array([1.0, 0.0, 0.0, 0.0])
-
-    # EKF setup
     ekf = ExtendedKalmanFilter(dim_x=4, dim_z=2)
-    ekf.x = np.array([0, 0, 0, 0])
+    ekf.x = np.array([0.0, 0.0, 0.0, 0.0])
     ekf.P *= 5
-    ekf.R *= 0.05
+    ekf.R *= 0.1
     ekf.Q *= 0.01
 
+    yaw = 0.0
     last_time = time.time()
 
     try:
@@ -115,48 +99,39 @@ if __name__ == "__main__":
             dt = now - last_time
             last_time = now
 
-            # IMU read and filter
             accel_raw = read_accel(d, imu_addr)
-            gyro_raw = read_gyro_x(d, imu_addr)
-            if accel_raw["x"] is None or gyro_raw is None:
+            gyro_raw = read_gyro(d, imu_addr)
+
+            if None in accel_raw.values() or None in gyro_raw.values():
                 continue
 
-            ax, ay, az, gx = convert_units(accel_raw["x"], accel_raw["y"], accel_raw["z"], gyro_raw)
-            accel = np.array([ax, ay, az]) / 9.81
-            gyro = np.array([0.0, gx, 0.0])
-            orientation = madgwick.updateIMU(orientation, gyr=gyro, acc=accel)
+            acc, gyr = convert_units(accel_raw, gyro_raw)
 
-            # Rotation matrix
-            q = orientation
-            R = np.array([
-                [1 - 2*(q[2]**2 + q[3]**2),     2*(q[1]*q[2] - q[3]*q[0]),     2*(q[1]*q[3] + q[2]*q[0])],
-                [2*(q[1]*q[2] + q[3]*q[0]),     1 - 2*(q[1]**2 + q[3]**2),     2*(q[2]*q[3] - q[1]*q[0])],
-                [2*(q[1]*q[3] - q[2]*q[0]),     2*(q[2]*q[3] + q[1]*q[0]),     1 - 2*(q[1]**2 + q[2]**2)]
-            ])
-            world_accel = R @ (accel * 9.81) - np.array([0.0, 0.0, 9.81])
+            # Integrate Z gyro (yaw)
+            yaw += gyr[2] * dt
+            yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
+            yaw_deg = math.degrees(yaw)
 
-            # EKF Predict
             ekf.F = np.eye(4)
             ekf.F[0, 2] = dt
             ekf.F[1, 3] = dt
             ekf.predict()
 
-            # UWB read
             data = DWM.readline().decode("utf-8").strip()
-            if data and "POS" in data:
-                data = data.replace("\r\n", "").split(",")
+            if "POS" in data:
                 try:
-                    x = float(data[data.index("POS")+1])
-                    y = float(data[data.index("POS")+2])
+                    parts = data.split(",")
+                    x = float(parts[parts.index("POS")+1])
+                    y = float(parts[parts.index("POS")+2])
                     ekf.update(np.array([x, y]), HJacobian_at, hx)
                 except Exception as e:
-                    print(f"⚠️ Parsing error: {e}")
+                    print("⚠️ UWB Parse Error:", e)
 
-            print(f"📍 Fused x: {ekf.x[0]:.2f}, y: {ekf.x[1]:.2f}, θ: {math.degrees(gx):.2f}°")
-            time.sleep(0.01)
+            print(f"Fused x: {ekf.x[0]:.2f}, y: {ekf.x[1]:.2f}, θ (yaw): {yaw_deg:.2f}°")
+            time.sleep(0.1)
 
     except KeyboardInterrupt:
-        print("Exiting...")
-        DWM.write("\r".encode())
+        print("Stopping...")
+        DWM.write(b"\r")
         DWM.close()
         d.h.close()
