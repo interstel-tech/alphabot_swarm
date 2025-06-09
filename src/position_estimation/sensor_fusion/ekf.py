@@ -5,6 +5,7 @@ import redis
 import hid
 import numpy as np
 from filterpy.kalman import ExtendedKalmanFilter
+from ahrs.filters import Madgwick
 
 # --- HID Driver Class ---
 class HIDDriver:
@@ -88,6 +89,14 @@ def jacobian_F(x, dt):
 def measurement_function(x): return x[:2]
 def jacobian_H(x): return np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
 
+# --- Madgwick Functions ---
+madgwick = Madgwick()
+q = np.array([1.0, 0.0, 0.0, 0.0])  # Initial quaternion
+
+def quaternion_to_yaw(q):
+    w, x, y, z = q
+    return math.atan2(2.0*(w*z + x*y), 1.0 - 2.0*(y*y + z*z))
+
 # --- Main Loop ---
 if __name__ == "__main__":
     r = redis.Redis(host='localhost', port=6379, db=0)
@@ -126,7 +135,9 @@ if __name__ == "__main__":
             acc, gyr = convert_units(accel_raw, gyro_raw)
 
             # Update yaw angle
-            yaw += gyr[2] * dt
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
             yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
 
             # Estimate forward velocity from x-acceleration in body frame

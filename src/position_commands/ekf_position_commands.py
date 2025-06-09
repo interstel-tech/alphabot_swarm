@@ -7,8 +7,9 @@ import numpy as np
 import RPi.GPIO as GPIO
 import sys
 import os
-
 from filterpy.kalman import ExtendedKalmanFilter
+from ahrs.filters import Madgwick
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from AlphaBot2 import AlphaBot2
 
@@ -67,6 +68,7 @@ def read_word(driver, addr, high_reg, low_reg):
     raw = (high << 8) | low
     return raw - 65536 if raw & 0x8000 else raw
 
+# Read raw accelerometer data
 def read_accel(driver, addr):
     return {
         "x": read_word(driver, addr, 0x31, 0x32),
@@ -74,6 +76,7 @@ def read_accel(driver, addr):
         "z": read_word(driver, addr, 0x2D, 0x2E)
     }
 
+# Read raw gyroscope data
 def read_gyro(driver, addr):
     return {
         "x": read_word(driver, addr, 0x37, 0x38),
@@ -81,6 +84,7 @@ def read_gyro(driver, addr):
         "z": read_word(driver, addr, 0x33, 0x34)
     }
 
+# Converts accelerometer and gyroscope to base units
 def convert_units(accel_raw, gyro_raw):
     ACCEL_SCALE = 16384.0
     GYRO_SCALE = 131.0
@@ -93,7 +97,7 @@ def convert_units(accel_raw, gyro_raw):
     gz = -(math.radians(gyro_raw["z"] / GYRO_SCALE))
     return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
-# Initialize
+# Initialize AlphaBot
 Ab = AlphaBot2()
 
 r = redis.Redis(host='localhost', port=6379, db=0)
@@ -104,7 +108,7 @@ time.sleep(1)
 DWM.write(b"lec\r")
 time.sleep(1)
 
-# IMU Setup
+# IMU Initialization
 d = HIDDriver()
 imu_addr = 0x69
 d.write_byte_data(imu_addr, 0x06, 0x01)
@@ -116,6 +120,14 @@ ekf.x = np.array([0.0, 0.0, 0.0, 0.0])
 ekf.P *= 5
 ekf.R *= 0.1
 ekf.Q *= 0.01
+
+# Madgwick Initialization
+madgwick = Madgwick()
+q = np.array([1.0, 0.0, 0.0, 0.0])  # Initial quaternion
+
+def quaternion_to_yaw(q):
+    w, x, y, z = q
+    return math.atan2(2.0*(w*z + x*y), 1.0 - 2.0*(y*y + z*z))
 
 # User Input
 x_target = float(input("Enter target x (m): "))
@@ -156,7 +168,10 @@ while True:
 
     gyro_raw = read_gyro(d, imu_addr)
     _, gyr = convert_units({"x": 0, "y": 0, "z": 0}, gyro_raw)
-    yaw += gyr[2] * dt
+    q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+    if q is not None:
+        yaw = quaternion_to_yaw(q)
+
     yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
 
     angle_error = math.degrees(yaw - target_angle)
