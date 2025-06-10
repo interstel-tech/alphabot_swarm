@@ -67,7 +67,7 @@ def convert_units(accel_raw, gyro_raw):
     az = (accel_raw["z"] / ACCEL_SCALE) * GRAVITY
     gx = math.radians(gyro_raw["x"] / GYRO_SCALE) 
     gy = math.radians(gyro_raw["y"] / GYRO_SCALE)
-    gz = -(math.radians(gyro_raw["z"] / GYRO_SCALE))
+    gz = math.radians(gyro_raw["z"] / GYRO_SCALE) + 0.019
     return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
 # --- EKF Functions ---
@@ -138,7 +138,7 @@ if __name__ == "__main__":
             q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
             if q is not None:
                 yaw = quaternion_to_yaw(q)
-            yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
 
             # Estimate forward velocity from x-acceleration in body frame
             forward_acc = acc[0]

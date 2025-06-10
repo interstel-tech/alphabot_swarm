@@ -30,7 +30,7 @@ try:
         message = f"{y},{x}".encode()  # Encode as "y,x"
 
         # Send to the robot client
-        robot_address = ('192.168.33.222', 12000)
+        robot_address = ('192.168.33.228', 12000) # Change based on Raspberry Pi IP 
         server_socket.sendto(message, robot_address)
         print(f"Sent command: x={x} m, y={y} m")
 
