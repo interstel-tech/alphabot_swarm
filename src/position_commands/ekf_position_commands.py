@@ -9,230 +9,188 @@ import sys
 import os
 import json
 from ahrs.filters import Madgwick
-from filterpy.kalman import ExtendedKalmanFilter
+import imufusion
+from networktables import NetworkTables
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from AlphaBot2 import AlphaBot2
+from utils.kalman import Fusion, UWB
+from utils.dwm import dwm1001
 
-# --- CP2112 HID Driver ---
 class HIDDriver:
-    def __init__(self, *, serial=None):
-        self.h = hid.device()
+    def __init__(self,*,serial=None, led=True):
+        h = self.h = hid.device()
         self.h.open(0x10C4, 0xEA90, serial)
         self.h.send_feature_report([0x03, 0xFF, 0x00, 0x00, 0x00])
-        self.h.send_feature_report([0x04, 0x00, 0xFF])
-        self.h.send_feature_report([0x04, 0xFF, 0xFF])
+        for _ in range(3):
+            self.h.send_feature_report([0x04, 0x00, 0xFF])
+            time.sleep(0.1)
+            self.h.send_feature_report([0x04, 0xFF, 0xFF])
+            time.sleep(0.1)
         self.h.send_feature_report([0x02, 0x83, 0xFF, 0xFF, 0x01])
-        self.h.send_feature_report([0x06, 0x00, 0x01, 0x86, 0xA0, 0x02,
-                                    0x00, 0x00, 0xFF, 0x00, 0xFF, 0x01,
-                                    0x00, 0x0F])
+        self.h.send_feature_report([0x06, 0x00, 0x01, 0x86, 0xA0, 0x02, 0x00, 0x00,
+                                    0xFF, 0x00, 0xFF, 0x01, 0x00, 0x0F])
 
     def read_byte_data(self, address, register):
         self.h.write([0x11, address << 1, 0x00, 0x01, 0x01, register])
         for _ in range(10):
             self.h.write([0x15, 0x01])
-            resp = self.h.read(7)
-            if resp and (resp[0] == 0x16) and (resp[2] == 5):
+            response = self.h.read(7)
+            if response and response[0] == 0x16 and response[2] == 5:
                 self.h.write([0x12, 0x00, 0x01])
-                resp = self.h.read(4)
-                return resp[3]
+                response = self.h.read(4)
+                return response[3]
         return None
 
     def write_byte_data(self, address, register, value):
         self.h.write([0x14, address << 1, 0x02, register, value])
         time.sleep(0.01)
 
-# --- IMU Helpers ---
-def read_word(driver, addr, high_reg, low_reg):
-    high = driver.read_byte_data(addr, high_reg)
-    low = driver.read_byte_data(addr, low_reg)
-    if high is None or low is None:
-        return None
-    raw = (high << 8) | low
-    return raw - 65536 if raw & 0x8000 else raw
+def initialize_icm20948(driver, addr):
+    driver.write_byte_data(addr, 0x06, 0x01)
+    time.sleep(0.01)
+    driver.write_byte_data(addr, 0x3F, 0x00)
+    time.sleep(0.01)
 
-def read_accel(driver, addr):
-    return {
-        "x": read_word(driver, addr, 0x31, 0x32),
-        "y": read_word(driver, addr, 0x2F, 0x30),
-        "z": read_word(driver, addr, 0x2D, 0x2E)
+def read_gyro(driver, imu_address):
+    registers = {
+        "gyro_x": (0x37, 0x38),
+        "gyro_y": (0x35, 0x36),
+        "gyro_z": (0x33, 0x34)
     }
+    gyro_data = {}
+    for axis, (high_reg, low_reg) in registers.items():
+        high = driver.read_byte_data(imu_address, high_reg)
+        low = driver.read_byte_data(imu_address, low_reg)
+        if high is None or low is None:
+            gyro_data[axis] = None
+            continue
+        raw = (high << 8) | low
+        if raw & 0x8000:
+            raw = -((65535 - raw) + 1)
+        gyro_data[axis] = raw
+    return gyro_data
 
-def read_gyro(driver, addr):
-    return {
-        "x": read_word(driver, addr, 0x37, 0x38),
-        "y": read_word(driver, addr, 0x35, 0x36),
-        "z": read_word(driver, addr, 0x33, 0x34)
-    }
-
-def convert_units(accel_raw, gyro_raw):
-    ACCEL_SCALE = 16384.0
+def convert_gyro(gyro_raw):
     GYRO_SCALE = 131.0
-    GRAVITY = 9.80665
-    ax = (accel_raw["x"] / ACCEL_SCALE) * GRAVITY
-    ay = (accel_raw["y"] / ACCEL_SCALE) * GRAVITY
-    az = (accel_raw["z"] / ACCEL_SCALE) * GRAVITY
-    gx = math.radians(gyro_raw["x"] / GYRO_SCALE)
-    gy = math.radians(gyro_raw["y"] / GYRO_SCALE)
-    gz = math.radians(gyro_raw["z"] / GYRO_SCALE) + 0.019
-    return np.array([ax, ay, az]), np.array([gx, gy, gz])
+    gx = math.radians(gyro_raw["gyro_x"] / GYRO_SCALE)
+    gy = math.radians(gyro_raw["gyro_y"] / GYRO_SCALE)
+    gz = math.radians(gyro_raw["gyro_z"] / GYRO_SCALE) + 0.019
+    return np.array([gx, gy, gz])
 
-# --- EKF and Madgwick Filter Setup ---
-def state_transition(x, dt):
-    x_pos, y_pos, v_forward, yaw = x
-    x_pos += v_forward * math.cos(yaw) * dt
-    y_pos += v_forward * math.sin(yaw) * dt
-    return np.array([x_pos, y_pos, v_forward, yaw])
-
-def jacobian_F(x, dt):
-    _, _, v_forward, yaw = x
-    return np.array([
-        [1, 0, math.cos(yaw)*dt, -v_forward * math.sin(yaw) * dt],
-        [0, 1, math.sin(yaw)*dt,  v_forward * math.cos(yaw) * dt],
-        [0, 0, 1,                0],
-        [0, 0, 0,                1]
-    ])
-
-def measurement_function(x): return x[:2]
-def jacobian_H(x): return np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
-
-def quaternion_to_yaw(q):
-    w, x, y, z = q
-    return math.atan2(2.0*(w*z + x*y), 1.0 - 2.0*(y*y + z*z))
-
-# --- Main Execution ---
+NetworkTables.initialize()
+nt = NetworkTables.getTable("localization")
 Ab = AlphaBot2()
-r = redis.Redis(host='localhost', port=6379, db=0)
-DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200)
-DWM.write(b"\r\r")
-time.sleep(1)
-DWM.write(b"lec\r")
-time.sleep(1)
 
-d = HIDDriver()
-imu_addr = 0x69
-d.write_byte_data(imu_addr, 0x06, 0x01)
-d.write_byte_data(imu_addr, 0x3F, 0x00)
+print("🔌 Connecting to DWM1001...")
+dwm = dwm1001("/dev/ttyACM0")
 
-madgwick = Madgwick()
-q = np.array([1.0, 0.0, 0.0, 0.0])
+print("🔌 Connecting to IMU...")
+driver = HIDDriver()
+imu_address = 0x69
+initialize_icm20948(driver, imu_address)
 
-ekf = ExtendedKalmanFilter(dim_x=4, dim_z=2)
-ekf.x = np.array([0.0, 0.0, 0.0, 0.0])
-ekf.P *= 5
-ekf.R *= 0.1
-ekf.Q *= 0.01
+print("⌛ Initializing AHRS (IMU orientation)...")
+ahrs = imufusion.Ahrs()
+prev_time = time.monotonic_ns()
+while ahrs.flags.initialising:
+    gyro_raw = read_gyro(driver, imu_address)
+    if None in gyro_raw.values():
+        continue
+    gyr = convert_gyro(gyro_raw)
+    dt = (time.monotonic_ns() - prev_time) / 1e9
+    ahrs.update_no_magnetometer(gyr, np.array([0.0, 0.0, 9.8]), dt)
+    prev_time = time.monotonic_ns()
+print("✅ AHRS Ready.")
 
-try:
-    while True:
-        user_input = input("Enter target x y (or q to quit): ")
-        if user_input.strip().lower() == 'q':
-            break
+while True:
+    user_input = input("Enter target x y (or q to quit): ")
+    if user_input.strip().lower() == 'q':
+        break
+
+    try:
         x_target, y_target = map(float, user_input.strip().split())
+    except:
+        print("Invalid input. Enter x y or q.")
+        continue
 
-        print("Waiting for UWB reading to initialize EKF...")
-        while True:
-            data = DWM.readline().decode("utf-8").strip()
-            if "POS" in data:
-                parts = data.split(",")
-                try:
-                    ekf.x[0] = float(parts[parts.index("POS") + 1])
-                    ekf.x[1] = float(parts[parts.index("POS") + 2])
-                    break
-                except:
-                    continue
+    print("Collecting initial UWB readings for averaging...")
+    x_list, y_list = [], []
+    while len(x_list) < 20:
+        try:
+            pos = dwm.position()
+            x_list.append(pos.px)
+            y_list.append(pos.py)
+        except:
+            continue
 
-        target_angle = math.atan2(y_target - ekf.x[1], x_target - ekf.x[0])
-        yaw = 0.0
-        last_time = time.time()
+    x_pos = sum(x_list) / len(x_list)
+    y_pos = sum(y_list) / len(y_list)
 
-        Ab.setPWMA(20)
-        Ab.setPWMB(20)
-        if target_angle > 0:
+    fusion_ekf = Fusion(x_pos, y_pos, 0.0)
+    target_angle = math.atan2(y_target - y_pos, x_target - x_pos)
+
+    print("Rotating to target...")
+    Ab.setPWMA(15)
+    Ab.setPWMB(15)
+    if target_angle > 0:
+        Ab.left()
+    else:
+        Ab.right()
+
+    prev_time = time.monotonic_ns()
+    yaw = ahrs.quaternion.to_euler()[2]
+    initial_sign = math.copysign(1, yaw - target_angle)
+    while True:
+        gyro_raw = read_gyro(driver, imu_address)
+        if None in gyro_raw.values():
+            continue
+        gyr = convert_gyro(gyro_raw)
+        dt = (time.monotonic_ns() - prev_time) / 1e9
+        ahrs.update_no_magnetometer(gyr, np.array([0.0, 0.0, 9.8]), dt)
+        prev_time = time.monotonic_ns()
+
+        yaw = ahrs.quaternion.to_euler()[2]
+        angle_error = math.degrees(yaw - target_angle)
+        print(f"Yaw Error: {angle_error:.2f}")
+        if abs(angle_error) < 5 or math.copysign(1, angle_error) != initial_sign:
+            Ab.stop()
+            break
+
+    print("Moving to target...")
+    while True:
+        gyro_raw = read_gyro(driver, imu_address)
+        if None in gyro_raw.values():
+            continue
+
+        gyr = convert_gyro(gyro_raw)
+        dt = (time.monotonic_ns() - prev_time) / 1e9
+        ahrs.update_no_magnetometer(gyr, np.array([0.0, 0.0, 9.8]), dt)
+        prev_time = time.monotonic_ns()
+
+        yaw = ahrs.quaternion.to_euler()[2]
+        print(f"Yaw: {math.degrees(yaw):.2f}°")
+
+        anchors = dwm.anchors()
+        fusion_ekf.dwm_update(anchors, 0, 0, 0)
+        x_est, y_est = fusion_ekf.get_x()[0, 0], fusion_ekf.get_x()[1, 0]
+
+        if abs(x_est - x_target) < 0.05 and abs(y_est - y_target) < 0.05:
+            Ab.stop()
+            break
+
+        dynamic_angle = math.atan2(y_target - y_est, x_target - x_est)
+        yaw_error = math.degrees(yaw - dynamic_angle)
+        print(f"Yaw Drift: {yaw_error:.2f}")
+
+        if yaw_error > 10:
+            Ab.right()
+        elif yaw_error < -10:
             Ab.left()
         else:
-            Ab.right()
-
-        while True:
-            now = time.time()
-            dt = now - last_time
-            last_time = now
-            accel_raw = read_accel(d, imu_addr)
-            gyro_raw = read_gyro(d, imu_addr)
-            if None in accel_raw.values() or None in gyro_raw.values():
-                continue
-            acc, gyr = convert_units(accel_raw, gyro_raw)
-            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-            if q is not None:
-                yaw = quaternion_to_yaw(q)
-            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-            if abs(math.degrees(yaw - target_angle)) < 5:
-                break
-        Ab.stop()
-
-        Ab.setPWMA(20)
-        Ab.setPWMB(20)
-        while True:
-            now = time.time()
-            dt = now - last_time
-            last_time = now
-            accel_raw = read_accel(d, imu_addr)
-            gyro_raw = read_gyro(d, imu_addr)
-            if None in accel_raw.values() or None in gyro_raw.values():
-                continue
-            acc, gyr = convert_units(accel_raw, gyro_raw)
-            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-            if q is not None:
-                yaw = quaternion_to_yaw(q)
-            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-
-            ekf.x[2] += acc[0] * dt
-            ekf.x[3] = yaw
-            ekf.x = state_transition(ekf.x, dt)
-            ekf.F = jacobian_F(ekf.x, dt)
-            ekf.predict()
-
-            data = DWM.readline().decode("utf-8").strip()
-            if "POS" in data:
-                parts = data.split(",")
-                try:
-                    x = float(parts[parts.index("POS") + 1])
-                    y = float(parts[parts.index("POS") + 2])
-                    ekf.update(np.array([x, y]), jacobian_H, measurement_function)
-                except:
-                    continue
-
-            print(f"EKF: x={ekf.x[0]:.2f}, y={ekf.x[1]:.2f}")
-            if abs(ekf.x[0] - x_target) < 0.1 and abs(ekf.x[1] - y_target) < 0.1:
-                Ab.stop()
-                break
             Ab.forward()
 
-        print("Rotating back to 0°...")
-        if yaw > 0:
-            Ab.right()
-        else:
-            Ab.left()
-        while True:
-            now = time.time()
-            dt = now - last_time
-            last_time = now
-            accel_raw = read_accel(d, imu_addr)
-            gyro_raw = read_gyro(d, imu_addr)
-            if None in accel_raw.values() or None in gyro_raw.values():
-                continue
-            acc, gyr = convert_units(accel_raw, gyro_raw)
-            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-            if q is not None:
-                yaw = quaternion_to_yaw(q)
-            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-            if abs(math.degrees(yaw)) < 3:
-                break
-        Ab.stop()
-
-except KeyboardInterrupt:
-    print("Stopped by user.")
-finally:
-    DWM.write(b"\r")
-    DWM.close()
-    GPIO.cleanup()
+print("🛑 Shutting down...")
+dwm.close()
+driver.h.close()
+GPIO.cleanup()
