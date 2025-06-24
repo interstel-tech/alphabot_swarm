@@ -7,8 +7,9 @@ import numpy as np
 import RPi.GPIO as GPIO
 import sys
 import os
-from filterpy.kalman import ExtendedKalmanFilter
+import json
 from ahrs.filters import Madgwick
+from filterpy.kalman import ExtendedKalmanFilter
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from AlphaBot2 import AlphaBot2
@@ -76,7 +77,7 @@ def convert_units(accel_raw, gyro_raw):
     gz = math.radians(gyro_raw["z"] / GYRO_SCALE) + 0.019
     return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
-# --- Kalman Filter Helpers ---
+# --- EKF and Madgwick Filter Setup ---
 def state_transition(x, dt):
     x_pos, y_pos, v_forward, yaw = x
     x_pos += v_forward * math.cos(yaw) * dt
@@ -95,19 +96,14 @@ def jacobian_F(x, dt):
 def measurement_function(x): return x[:2]
 def jacobian_H(x): return np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
 
-# --- Madgwick Yaw ---
-madgwick = Madgwick()
-q = np.array([1.0, 0.0, 0.0, 0.0])
-
 def quaternion_to_yaw(q):
     w, x, y, z = q
     return math.atan2(2.0*(w*z + x*y), 1.0 - 2.0*(y*y + z*z))
 
-# --- Setup ---
+# --- Main Execution ---
 Ab = AlphaBot2()
 r = redis.Redis(host='localhost', port=6379, db=0)
 DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200)
-print("Connected to " + DWM.name)
 DWM.write(b"\r\r")
 time.sleep(1)
 DWM.write(b"lec\r")
@@ -118,142 +114,121 @@ imu_addr = 0x69
 d.write_byte_data(imu_addr, 0x06, 0x01)
 d.write_byte_data(imu_addr, 0x3F, 0x00)
 
+madgwick = Madgwick()
+q = np.array([1.0, 0.0, 0.0, 0.0])
+
 ekf = ExtendedKalmanFilter(dim_x=4, dim_z=2)
 ekf.x = np.array([0.0, 0.0, 0.0, 0.0])
 ekf.P *= 5
 ekf.R *= 0.1
 ekf.Q *= 0.01
 
-# --- Target Input ---
-x_target = float(input("Enter target x (m): "))
-y_target = float(input("Enter target y (m): "))
-
-print("Waiting for first UWB reading...")
-while True:
-    data = DWM.readline().decode("utf-8").strip()
-    if "POS" in data:
-        parts = data.split(",")
-        try:
-            ekf.x[0] = float(parts[parts.index("POS") + 1])
-            ekf.x[1] = float(parts[parts.index("POS") + 2])
-            break
-        except:
-            continue
-
-# --- Initial Rotation ---
-print("Rotating to target...")
-Ab.setPWMA(12)
-Ab.setPWMB(12)
-target_angle = math.atan2(y_target - ekf.x[1], x_target - ekf.x[0])
-yaw = 0.0
-last_time = time.time()
-if target_angle > 0:
-    Ab.left()
-else:
-    Ab.right()
-initial_sign = math.copysign(1, yaw - target_angle)
-
-while True:
-    now = time.time()
-    dt = now - last_time
-    last_time = now
-
-    accel_raw = read_accel(d, imu_addr)
-    gyro_raw = read_gyro(d, imu_addr)
-    if None in accel_raw.values() or None in gyro_raw.values():
-        continue
-
-    acc, gyr = convert_units(accel_raw, gyro_raw)
-
-    # Update yaw angle
-    q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-    if q is not None:
-        yaw = quaternion_to_yaw(q)
-    
-    yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-    angle_error = math.degrees(yaw - target_angle)
-    print(f"Yaw Error: {angle_error:.2f}°")
-    if abs(angle_error) < 5 or math.copysign(1, angle_error) != initial_sign:
-        break
-Ab.stop()
-
-# --- Move to Target ---
-print("Moving to target...")
-Ab.setPWMA(20)
-Ab.setPWMB(20)
-
 try:
     while True:
-        now = time.time()
-        dt = now - last_time
-        last_time = now
-
-        accel_raw = read_accel(d, imu_addr)
-        gyro_raw = read_gyro(d, imu_addr)
-        if None in accel_raw.values() or None in gyro_raw.values():
-            continue
-
-        acc, gyr = convert_units(accel_raw, gyro_raw)
-
-        # Update yaw angle
-        q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-        if q is not None:
-            yaw = quaternion_to_yaw(q)
-
-        yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-
-        # Estimate forward velocity from x-acceleration body frame
-        forward_acc = acc[0]
-        ekf.x[2] += forward_acc * dt
-        ekf.x[3] = yaw
-
-        # Predict using nonlinear motion model
-        ekf.x = state_transition(ekf.x, dt)
-        ekf.F = jacobian_F(ekf.x, dt)
-        ekf.predict()
-
-        # UWB update
-        data = DWM.readline().decode("utf-8").strip()
-        if "POS" in data:
-            parts = data.split(",")
-            try:
-                x = float(parts[parts.index("POS") + 1])
-                y = float(parts[parts.index("POS") + 2])
-                ekf.update(np.array([x, y]), jacobian_H, measurement_function)
-            except:
-                pass
-
-        print(f"EKF: x={ekf.x[0]:.2f}, y={ekf.x[1]:.2f}, θ={math.degrees(yaw):.2f}°")
-        Ab.forward()
-        if abs(ekf.x[0] - x_target) < 0.1 and abs(ekf.x[1] - y_target) < 0.1:
-            Ab.stop()
+        user_input = input("Enter target x y (or q to quit): ")
+        if user_input.strip().lower() == 'q':
             break
-        time.sleep(0.05)
+        x_target, y_target = map(float, user_input.strip().split())
 
-    # --- Final Rotation to 0° ---
-    print("Rotating back to 0°...")
-    if yaw > 0:
-        Ab.left()
-    else:
-        Ab.right()
-    initial_yaw_sign = math.copysign(1, yaw)
+        print("Waiting for UWB reading to initialize EKF...")
+        while True:
+            data = DWM.readline().decode("utf-8").strip()
+            if "POS" in data:
+                parts = data.split(",")
+                try:
+                    ekf.x[0] = float(parts[parts.index("POS") + 1])
+                    ekf.x[1] = float(parts[parts.index("POS") + 2])
+                    break
+                except:
+                    continue
 
-    while True:
-        now = time.time()
-        dt = now - last_time
-        last_time = now
-        accel_raw = read_accel(d, imu_addr)
-        gyro_raw = read_gyro(d, imu_addr)
-        if None in accel_raw.values() or None in gyro_raw.values():
-            continue
-        acc, gyr = convert_units(accel_raw, gyro_raw)
-        q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-        if q is not None:
-            yaw = quaternion_to_yaw(q)
-        yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-        if abs(math.degrees(yaw)) < 1 or math.copysign(1, yaw) != initial_yaw_sign:
-            break
-    Ab.stop()
+        target_angle = math.atan2(y_target - ekf.x[1], x_target - ekf.x[0])
+        yaw = 0.0
+        last_time = time.time()
+
+        Ab.setPWMA(20)
+        Ab.setPWMB(20)
+        if target_angle > 0:
+            Ab.left()
+        else:
+            Ab.right()
+
+        while True:
+            now = time.time()
+            dt = now - last_time
+            last_time = now
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+            if abs(math.degrees(yaw - target_angle)) < 5:
+                break
+        Ab.stop()
+
+        Ab.setPWMA(20)
+        Ab.setPWMB(20)
+        while True:
+            now = time.time()
+            dt = now - last_time
+            last_time = now
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+
+            ekf.x[2] += acc[0] * dt
+            ekf.x[3] = yaw
+            ekf.x = state_transition(ekf.x, dt)
+            ekf.F = jacobian_F(ekf.x, dt)
+            ekf.predict()
+
+            data = DWM.readline().decode("utf-8").strip()
+            if "POS" in data:
+                parts = data.split(",")
+                try:
+                    x = float(parts[parts.index("POS") + 1])
+                    y = float(parts[parts.index("POS") + 2])
+                    ekf.update(np.array([x, y]), jacobian_H, measurement_function)
+                except:
+                    continue
+
+            print(f"EKF: x={ekf.x[0]:.2f}, y={ekf.x[1]:.2f}")
+            if abs(ekf.x[0] - x_target) < 0.1 and abs(ekf.x[1] - y_target) < 0.1:
+                Ab.stop()
+                break
+            Ab.forward()
+
+        print("Rotating back to 0°...")
+        if yaw > 0:
+            Ab.right()
+        else:
+            Ab.left()
+        while True:
+            now = time.time()
+            dt = now - last_time
+            last_time = now
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+            if abs(math.degrees(yaw)) < 3:
+                break
+        Ab.stop()
 
 except KeyboardInterrupt:
     print("Stopped by user.")
