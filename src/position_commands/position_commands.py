@@ -7,6 +7,7 @@ import numpy as np
 import RPi.GPIO as GPIO
 import sys
 import os
+import json
 from ahrs.filters import Madgwick
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -75,10 +76,6 @@ def convert_units(accel_raw, gyro_raw):
     gz = math.radians(gyro_raw["z"] / GYRO_SCALE) + 0.019
     return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
-# --- Madgwick Yaw ---
-madgwick = Madgwick()
-q = np.array([1.0, 0.0, 0.0, 0.0])
-
 def quaternion_to_yaw(q):
     w, x, y, z = q
     return math.atan2(2.0*(w*z + x*y), 1.0 - 2.0*(y*y + z*z))
@@ -98,116 +95,144 @@ imu_addr = 0x69
 d.write_byte_data(imu_addr, 0x06, 0x01)
 d.write_byte_data(imu_addr, 0x3F, 0x00)
 
-# --- Target Input ---
-x_target = float(input("Enter target x (m): "))
-y_target = float(input("Enter target y (m): "))
-
-print("Waiting for first UWB reading...")
-while True:
-    data = DWM.readline().decode("utf-8").strip()
-    if "POS" in data:
-        parts = data.split(",")
-        try:
-            x_pos = float(parts[parts.index("POS") + 1])
-            y_pos = float(parts[parts.index("POS") + 2])
-            break
-        except:
-            continue
-
-# --- Initial Rotation ---
-print("Rotating to target...")
-Ab.setPWMA(12)
-Ab.setPWMB(12)
-target_angle = math.atan2(y_target - y_pos, x_target - x_pos)
+madgwick = Madgwick()
+q = np.array([1.0, 0.0, 0.0, 0.0])
 yaw = 0.0
 last_time = time.time()
-if target_angle > 0:
-    Ab.left()
-else:
-    Ab.right()
-initial_sign = math.copysign(1, yaw - target_angle)
 
-while True:
-    now = time.time()
-    dt = now - last_time
-    last_time = now
-
-    accel_raw = read_accel(d, imu_addr)
-    gyro_raw = read_gyro(d, imu_addr)
-    if None in accel_raw.values() or None in gyro_raw.values():
-        continue
-
-    acc, gyr = convert_units(accel_raw, gyro_raw)
-    q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-    if q is not None:
-        yaw = quaternion_to_yaw(q)
-    yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-    angle_error = math.degrees(yaw - target_angle)
-    print(f"Yaw Error: {angle_error:.2f}°")
-    if abs(angle_error) < 5 or math.copysign(1, angle_error) != initial_sign:
-        break
-Ab.stop()
-
-# --- Move to Target ---
-print("Moving to target...")
-Ab.setPWMA(20)
-Ab.setPWMB(19)
-
-import json
-
-# Start reading loop
 try:
     while True:
-        print("🔄 Waiting for data...")
+        user_input = input("Enter target x y (or q to quit): ")
+        if user_input.strip().lower() == 'q':
+            break
+
         try:
+            x_target, y_target = map(float, user_input.strip().split())
+        except:
+            print("Invalid input. Enter x y or q.")
+            continue
+
+        print("Waiting for UWB...")
+        while True:
             data = DWM.readline().decode("utf-8").strip()
-        except UnicodeDecodeError as e:
-            print("⚠️ Decode error:", e)
-            continue
+            if "POS" in data:
+                try:
+                    parts = data.split(",")
+                    x_pos = float(parts[parts.index("POS") + 1])
+                    y_pos = float(parts[parts.index("POS") + 2])
+                    break
+                except:
+                    continue
 
-        if "POS" in data:
-            try:
-                parts = data.split(",")
-                x_pos = float(parts[parts.index("POS")+1])
-                y_pos = float(parts[parts.index("POS")+2])
-                pos = {"x": x_pos, "y": y_pos}
-                pos_json = json.dumps(pos)
-                print("✅", pos_json)
-                r.set("pos", pos_json)
-            except Exception as e:
-                print("⚠️ Parse error:", e)
-            Ab.forward()
-        if abs(x_pos - x_target) < 0.1 and abs(y_pos - y_target) < 0.1:
-            Ab.stop()
-            break
+        print("Rotating to target...")
+        Ab.setPWMA(12)
+        Ab.setPWMB(12)
+        target_angle = math.atan2(y_target - y_pos, x_target - x_pos)
+        if target_angle > 0:
+            Ab.left()
+        else:
+            Ab.right()
+        initial_sign = math.copysign(1, yaw - target_angle)
 
-    # --- Final Rotation to 0° ---
-    print("Rotating back to 0°...")
-    Ab.setPWMA(12)
-    Ab.setPWMB(12)
-    initial_yaw_sign = math.copysign(1, yaw)
-    if yaw > 0:
-        Ab.right()
-    else:
-        Ab.left()
+        while True:
+            now = time.time()
+            dt = now - last_time
+            last_time = now
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+            angle_error = math.degrees(yaw - target_angle)
+            print(f"Yaw Error: {angle_error:.2f}")
+            if abs(angle_error) < 5 or math.copysign(1, angle_error) != initial_sign:
+                break
+        Ab.stop()
 
-    while True:
-        now = time.time()
-        dt = now - last_time
-        last_time = now
-        accel_raw = read_accel(d, imu_addr)
-        gyro_raw = read_gyro(d, imu_addr)
-        if None in accel_raw.values() or None in gyro_raw.values():
-            continue
-        acc, gyr = convert_units(accel_raw, gyro_raw)
-        q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
-        if q is not None:
-            yaw = quaternion_to_yaw(q)
-        yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
-        print(math.degrees(yaw))
-        if abs(math.degrees(yaw)) < 5 or math.copysign(1, yaw) != initial_yaw_sign:
-            break
-    Ab.stop()
+        print("Moving to target...")
+        Ab.setPWMA(20)
+        Ab.setPWMB(20)
+        while True:
+            now = time.time()
+            dt = now - last_time
+            last_time = now
+
+            # IMU update
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+
+            # Yaw correction if drifted
+            yaw_error = math.degrees(yaw - target_angle)
+            print(f"Yaw Drift: {yaw_error:.2f}")
+            if yaw_error > 10:
+                print("↩️ Correcting right")
+                Ab.setPWMA(12)
+                Ab.setPWMB(12)
+                Ab.right()
+            elif yaw_error < -10:
+                print("↪️ Correcting left")
+                Ab.setPWMA(12)
+                Ab.setPWMB(12)
+                Ab.left()
+            else:
+                Ab.setPWMA(20)
+                Ab.setPWMB(20)
+                Ab.forward()
+
+
+            # UWB position update
+            data = DWM.readline().decode("utf-8").strip()
+            if "POS" in data:
+                try:
+                    parts = data.split(",")
+                    x_pos = float(parts[parts.index("POS") + 1])
+                    y_pos = float(parts[parts.index("POS") + 2])
+                    pos_json = json.dumps({"x": x_pos, "y": y_pos})
+                    print("✅", pos_json)
+                    r.set("pos", pos_json)
+                except:
+                    continue
+
+                if abs(x_pos - x_target) < 0.1 and abs(y_pos - y_target) < 0.1:
+                    Ab.stop()
+                    break
+
+        print("Rotating back to 0°...")
+        Ab.setPWMA(12)
+        Ab.setPWMB(12)
+        if yaw > 0:
+            Ab.right()
+        else:
+            Ab.left()
+        initial_yaw_sign = math.copysign(1, yaw)
+        while True:
+            now = time.time()
+            dt = now - last_time
+            last_time = now
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+            print(f"Yaw: {math.degrees(yaw):.2f}")
+            if abs(math.degrees(yaw)) < 3 or math.copysign(1, yaw) != initial_yaw_sign:
+                break
+        Ab.stop()
 
 except KeyboardInterrupt:
     print("Stopped by user.")
