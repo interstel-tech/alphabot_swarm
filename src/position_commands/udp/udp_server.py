@@ -3,7 +3,7 @@ import threading
 
 # Set up the UDP server
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_socket.bind(('192.168.33.249', 12000))  # Listen on port 12000
+server_socket.bind(('192.168.33.193', 12000))  # Listen on port 12000
 
 print("Server is listening for commands and position updates...")
 
