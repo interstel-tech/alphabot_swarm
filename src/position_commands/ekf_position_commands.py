@@ -162,15 +162,13 @@ while True:
         gyro_raw = read_gyro(driver, imu_address)
         if None in gyro_raw.values():
             continue
-
+    
         gyr = convert_gyro(gyro_raw)
         dt = (time.monotonic_ns() - prev_time) / 1e9
         ahrs.update_no_magnetometer(gyr, np.array([0.0, 0.0, 9.8]), dt)
         prev_time = time.monotonic_ns()
 
         yaw = ahrs.quaternion.to_euler()[2]
-        print(f"Yaw: {math.degrees(yaw):.2f}°")
-
         anchors = dwm.anchors()
         fusion_ekf.dwm_update(anchors, 0, 0, 0)
         x_est, y_est = fusion_ekf.get_x()[0, 0], fusion_ekf.get_x()[1, 0]
@@ -181,13 +179,20 @@ while True:
 
         dynamic_angle = math.atan2(y_target - y_est, x_target - x_est)
         yaw_error = math.degrees(yaw - dynamic_angle)
-        print(f"Yaw Drift: {yaw_error:.2f}")
+        print(f"Yaw Drift: {yaw_error:.2f}°, Position: x={x_est:.2f}, y={y_est:.2f}")
 
+ 
         if yaw_error > 10:
+            Ab.setPWMA(14)
+            Ab.setPWMB(14) 
             Ab.right()
         elif yaw_error < -10:
+            Ab.setPWMA(14)
+            Ab.setPWMB(14) 
             Ab.left()
         else:
+            Ab.setPWMA(20)
+            Ab.setPWMB(20)
             Ab.forward()
 
 print("🛑 Shutting down...")
