@@ -9,8 +9,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from AlphaBot2 import AlphaBot2
 
 Ab = AlphaBot2()
-Ab.setPWMA(20)
-Ab.setPWMB(20)
+Ab.setPWMA(25)
+Ab.setPWMB(25)
 
 BUZ = 4
 GPIO.setmode(GPIO.BCM)

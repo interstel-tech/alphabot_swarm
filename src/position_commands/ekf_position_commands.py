@@ -52,6 +52,25 @@ def initialize_icm20948(driver, addr):
     driver.write_byte_data(addr, 0x3F, 0x00)
     time.sleep(0.01)
 
+def read_accel(driver, imu_address):
+    registers = {
+        "accel_x": (0x31, 0x32),
+        "accel_y": (0x2F, 0x30),
+        "accel_z": (0x2D, 0x2E)
+    }
+    accel_data = {}
+    for axis, (high_reg, low_reg) in registers.items():
+        high = driver.read_byte_data(imu_address, high_reg)
+        low = driver.read_byte_data(imu_address, low_reg)
+        if high is None or low is None:
+            accel_data[axis] = None
+            continue
+        raw = (high << 8) | low
+        if raw & 0x8000:
+            raw = -((65535 - raw) + 1)
+        accel_data[axis] = raw
+    return accel_data
+
 def read_gyro(driver, imu_address):
     registers = {
         "gyro_x": (0x37, 0x38),
@@ -75,8 +94,16 @@ def convert_gyro(gyro_raw):
     GYRO_SCALE = 131.0
     gx = math.radians(gyro_raw["gyro_x"] / GYRO_SCALE)
     gy = math.radians(gyro_raw["gyro_y"] / GYRO_SCALE)
-    gz = math.radians(gyro_raw["gyro_z"] / GYRO_SCALE) + 0.019
+    gz = math.radians(gyro_raw["gyro_z"] / GYRO_SCALE)
     return np.array([gx, gy, gz])
+
+
+def convert_accel(accel_raw):
+    ACCEL_SCALE = 16384.0
+    ax = accel_raw["accel_x"] / ACCEL_SCALE * 9.8
+    ay = accel_raw["accel_y"] / ACCEL_SCALE * 9.8
+    az = accel_raw["accel_z"] / ACCEL_SCALE * 9.8
+    return np.array([ax, ay, az])
 
 NetworkTables.initialize()
 nt = NetworkTables.getTable("localization")
@@ -90,16 +117,40 @@ driver = HIDDriver()
 imu_address = 0x69
 initialize_icm20948(driver, imu_address)
 
+yaw = 0.0
+print("⏳ Collecting 100 IMU samples for offset calculation...")
+
+gyro_offsets = np.zeros(3)
+accel_offsets = np.zeros(3)
+samples = 0
+
+while samples < 100:
+    gyro_raw = read_gyro(driver, imu_address)
+    accel_raw = read_accel(driver, imu_address)
+    if gyro_raw is None or accel_raw is None:
+        continue
+
+    gyro_offsets += convert_gyro(gyro_raw)
+    accel_offsets += convert_accel(accel_raw)
+    samples += 1
+
+gyro_offsets /= samples
+accel_offsets /= samples
+print(f"\n✅ Gyro Offsets (rad/s): {gyro_offsets}")
+print(f"✅ Accel Offsets (m/s²): {accel_offsets}")
+
 print("⌛ Initializing AHRS (IMU orientation)...")
 ahrs = imufusion.Ahrs()
 prev_time = time.monotonic_ns()
 while ahrs.flags.initialising:
     gyro_raw = read_gyro(driver, imu_address)
-    if None in gyro_raw.values():
+    accel_raw = read_accel(driver, imu_address)
+    if gyro_raw is None or accel_raw is None:
         continue
-    gyr = convert_gyro(gyro_raw)
+    gyr = convert_gyro(gyro_raw) - gyro_offsets
+    acc = convert_accel(accel_raw) - accel_offsets
     dt = (time.monotonic_ns() - prev_time) / 1e9
-    ahrs.update_no_magnetometer(gyr, np.array([0.0, 0.0, 9.8]), dt)
+    ahrs.update_no_magnetometer(gyr, acc, dt)
     prev_time = time.monotonic_ns()
 print("✅ AHRS Ready.")
 
@@ -127,30 +178,36 @@ while True:
     x_pos = sum(x_list) / len(x_list)
     y_pos = sum(y_list) / len(y_list)
 
+    print(x_pos)
+    print(y_pos)
     fusion_ekf = Fusion(x_pos, y_pos, 0.0)
     target_angle = math.atan2(y_target - y_pos, x_target - x_pos)
 
     print("Rotating to target...")
-    Ab.setPWMA(15)
-    Ab.setPWMB(15)
+    Ab.setPWMA(20)
+    Ab.setPWMB(20)
     if target_angle > 0:
         Ab.left()
     else:
         Ab.right()
 
     prev_time = time.monotonic_ns()
-    yaw = ahrs.quaternion.to_euler()[2]
+    gyro_raw = read_gyro(driver, imu_address)
+    gyr = convert_gyro(gyro_raw) - gyro_offsets
+    yaw += gyr[2]
     initial_sign = math.copysign(1, yaw - target_angle)
     while True:
         gyro_raw = read_gyro(driver, imu_address)
+        accel_raw = read_accel(driver, imu_address)
         if None in gyro_raw.values():
             continue
-        gyr = convert_gyro(gyro_raw)
+        gyr = convert_gyro(gyro_raw) - gyro_offsets
+        acc = convert_accel(accel_raw) - accel_offsets
         dt = (time.monotonic_ns() - prev_time) / 1e9
-        ahrs.update_no_magnetometer(gyr, np.array([0.0, 0.0, 9.8]), dt)
+        yaw += gyr[2] * dt
+        ahrs.update_no_magnetometer(gyr, acc, dt)
         prev_time = time.monotonic_ns()
 
-        yaw = ahrs.quaternion.to_euler()[2]
         angle_error = math.degrees(yaw - target_angle)
         print(f"Yaw Error: {angle_error:.2f}")
         if abs(angle_error) < 5 or math.copysign(1, angle_error) != initial_sign:
@@ -160,40 +217,59 @@ while True:
     print("Moving to target...")
     while True:
         gyro_raw = read_gyro(driver, imu_address)
-        if None in gyro_raw.values():
+        accel_raw = read_accel(driver, imu_address)
+        if None in gyro_raw.values() or accel_raw is None:
             continue
-    
-        gyr = convert_gyro(gyro_raw)
+
+        gyr = convert_gyro(gyro_raw) - gyro_offsets
+        acc = convert_accel(accel_raw) - accel_offsets
+
         dt = (time.monotonic_ns() - prev_time) / 1e9
-        ahrs.update_no_magnetometer(gyr, np.array([0.0, 0.0, 9.8]), dt)
+        ahrs.update_no_magnetometer(gyr, acc, dt)
         prev_time = time.monotonic_ns()
 
-        yaw = ahrs.quaternion.to_euler()[2]
+        # yaw = ahrs.quaternion.to_euler()[2]
+        # Use only forward acceleration (acc_y_body)
+        forward_accel = acc[1]  # assuming forward is along body Y
+
+        acc_x_world = forward_accel * math.cos(yaw)
+        acc_y_world = forward_accel * math.sin(yaw)
+
+        # Optional: zero out lateral component since we assume no sideways motion
+        acc[0] = acc_x_world
+        acc[1] = acc_y_world
+
+        yaw += gyr[2] * dt
+
         anchors = dwm.anchors()
-        fusion_ekf.dwm_update(anchors, 0, 0, 0)
+        fusion_ekf.dwm_update(anchors, acc[0], acc[1], 0)
         x_est, y_est = fusion_ekf.get_x()[0, 0], fusion_ekf.get_x()[1, 0]
 
+        print_yaw = math.degrees(yaw)
+        print(print_yaw)
+        Ab.forward()
         if abs(x_est - x_target) < 0.05 and abs(y_est - y_target) < 0.05:
             Ab.stop()
             break
-
+        
         dynamic_angle = math.atan2(y_target - y_est, x_target - x_est)
         yaw_error = math.degrees(yaw - dynamic_angle)
         print(f"Yaw Drift: {yaw_error:.2f}°, Position: x={x_est:.2f}, y={y_est:.2f}")
 
- 
         if yaw_error > 10:
-            Ab.setPWMA(14)
-            Ab.setPWMB(14) 
-            Ab.right()
-        elif yaw_error < -10:
-            Ab.setPWMA(14)
-            Ab.setPWMB(14) 
-            Ab.left()
-        else:
             Ab.setPWMA(20)
             Ab.setPWMB(20)
+            Ab.right()
+        elif yaw_error < -10:
+            Ab.setPWMA(20)
+            Ab.setPWMB(20)
+            Ab.left()
+        else:
+            Ab.setPWMA(25)
+            Ab.setPWMB(25)
             Ab.forward()
+
+
 
 print("🛑 Shutting down...")
 dwm.close()
