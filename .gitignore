@@ -1,3 +1,5 @@
 __pycache__/
 .structurizr/
 .vscode
+build/
+temp/

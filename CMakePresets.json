@@ -1,0 +1,84 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+      "major": 3,
+      "minor": 20,
+      "patch": 0
+    },
+    "configurePresets": [
+      {
+        "name": "base",
+        "cacheVariables": {
+          "CMAKE_CXX_STANDARD": "17",
+          "CMAKE_CXX_STANDARD_REQUIRED": "TRUE"
+        }
+      },
+      {
+        "inherits": "base",
+        "name": "rpi-debug",
+        "displayName": "Raspberry Pi CM5 (Debug)",
+        "description": "Debug RPi CM5 build configurations",
+        "binaryDir": "${sourceDir}/build/rpi-debug",
+        "toolchainFile": "cmake/toolchain-rpi.cmake",
+        "cacheVariables": {
+          "CMAKE_EXECUTABLE_SUFFIX_CXX": ".elf",
+          "CMAKE_CXX_FLAGS": "-g -O0 -fmessage-length=0 -ffunction-sections -fdata-sections -Wall -Wextra -Wmaybe-uninitialized -Wtype-limits  -Wno-packed-bitfield-compat",
+          "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
+          "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+          "CMAKE_BUILD_TYPE": "Debug",
+          "CROSS_TYPE": "rpi"
+        }
+      },
+      {
+        "inherits": "base",
+        "name": "rpi-release",
+        "displayName": "Raspberry Pi CM5 (Release)",
+        "description": "Release RPi CM5 build configurations",
+        "binaryDir": "${sourceDir}/build/rpi-release",
+        "toolchainFile": "cmake/toolchain-rpi.cmake",
+        "cacheVariables": {
+          "CMAKE_EXECUTABLE_SUFFIX_CXX": ".elf",
+          "CMAKE_CXX_FLAGS": "-Os -fmessage-length=0 -ffunction-sections -fdata-sections -Wall -Wextra -Wmaybe-uninitialized -Wtype-limits -Wno-packed-bitfield-compat",
+          "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
+          "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+          "CMAKE_BUILD_TYPE": "Release",
+          "CROSS_TYPE": "rpi"
+        }
+      },
+      {
+        "inherits": "base",
+        "name": "linux-debug",
+        "displayName": "Linux (Debug)",
+        "description": "Linux build configurations",
+        "binaryDir": "${sourceDir}/build/linux-debug",
+        "cacheVariables": {
+          "CMAKE_EXECUTABLE_SUFFIX_CXX": ".elf",
+          "CMAKE_CXX_FLAGS": "-g -O0 -fmessage-length=0 -ffunction-sections -fdata-sections -Wall -Wextra -Wmaybe-uninitialized -Wtype-limits  -Wno-packed-bitfield-compat",
+          "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
+          "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+          "CMAKE_BUILD_TYPE": "Debug",
+          "CROSS_TYPE": "rpi"
+        }
+      }
+    ],
+    "buildPresets": [
+      {
+        "name": "rpi-debug",
+        "displayName": "Raspberry Pi CM5 (Debug)",
+        "configurePreset": "rpi-debug",
+        "configuration": "Debug"
+      },
+      {
+        "name": "rpi-release",
+        "displayName": "Raspberry Pi CM5 (Release)",
+        "configurePreset": "rpi-release",
+        "configuration": "Release"
+      },
+      {
+        "name": "linux-debug",
+        "displayName": "Linux (Debug)",
+        "configurePreset": "linux-debug",
+        "configuration": "Debug"
+      }
+    ]
+  }
