@@ -26,6 +26,10 @@ class AlphaBot2(object):
 		self.PWMA.start(self.PA)
 		self.PWMB.start(self.PB)
 		self.stop()
+		
+	def __del__(self):
+		self.stop()
+		GPIO.cleanup()
 
 	def forward(self):
 		self.PWMA.ChangeDutyCycle(self.PA)

@@ -10,8 +10,8 @@ import os
 import json
 from ahrs.filters import Madgwick
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-from AlphaBot2 import AlphaBot2
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
+from alphabot.robot import AlphaBot2
 
 # --- CP2112 HID Driver ---
 class HIDDriver:

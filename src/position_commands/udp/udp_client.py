@@ -12,7 +12,7 @@ from ahrs.filters import Madgwick
 import socket
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-from AlphaBot2 import AlphaBot2
+from alphabot.robot import AlphaBot2
 
 # --- CP2112 HID Driver ---
 class HIDDriver:
