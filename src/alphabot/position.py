@@ -34,9 +34,11 @@ def get_position():
             except Exception as e:
                 print(f"[WARN] Bad POS line: {data}")
                 continue
+        else:
+            print(f"[WARN] No POS in line: {data}")
+            continue
 
 def set_position(x_target, y_target, yaw):
-    print("Rotating to target...")
     madgwick = Madgwick()
     q = np.array([1.0, 0.0, 0.0, 0.0])
     last_time = time.time()
@@ -49,6 +51,7 @@ def set_position(x_target, y_target, yaw):
     x_pos, y_pos = get_position()
 
     target_angle = math.atan2(y_target - y_pos, x_target - x_pos) - math.radians(yaw)
+    print("Rotating to target...")
     if target_angle > 0:
         Ab.left()
     else:
