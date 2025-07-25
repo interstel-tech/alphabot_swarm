@@ -21,7 +21,6 @@
         "binaryDir": "${sourceDir}/build/rpi-debug",
         "toolchainFile": "cmake/toolchain-rpi.cmake",
         "cacheVariables": {
-          "CMAKE_EXECUTABLE_SUFFIX_CXX": ".elf",
           "CMAKE_CXX_FLAGS": "-g -O0 -fmessage-length=0 -ffunction-sections -fdata-sections -Wall -Wextra -Wmaybe-uninitialized -Wtype-limits  -Wno-packed-bitfield-compat",
           "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
           "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
@@ -37,7 +36,6 @@
         "binaryDir": "${sourceDir}/build/rpi-release",
         "toolchainFile": "cmake/toolchain-rpi.cmake",
         "cacheVariables": {
-          "CMAKE_EXECUTABLE_SUFFIX_CXX": ".elf",
           "CMAKE_CXX_FLAGS": "-Os -fmessage-length=0 -ffunction-sections -fdata-sections -Wall -Wextra -Wmaybe-uninitialized -Wtype-limits -Wno-packed-bitfield-compat",
           "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
           "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
@@ -52,7 +50,6 @@
         "description": "Linux build configurations",
         "binaryDir": "${sourceDir}/build/linux-debug",
         "cacheVariables": {
-          "CMAKE_EXECUTABLE_SUFFIX_CXX": ".elf",
           "CMAKE_CXX_FLAGS": "-g -O0 -fmessage-length=0 -ffunction-sections -fdata-sections -Wall -Wextra -Wmaybe-uninitialized -Wtype-limits  -Wno-packed-bitfield-compat",
           "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
           "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
