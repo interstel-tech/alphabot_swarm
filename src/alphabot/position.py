@@ -14,6 +14,7 @@ d = HIDDriver()
 imu_addr = 0x69
 DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=1)
 r = redis.Redis(host='localhost', port=6379, db=0)
+CURRENT_TARGET = (None, None)
 
 def cleanup():
     DWM.write(b"\r")
@@ -39,6 +40,7 @@ def get_position():
             continue
 
 def set_position(x_target, y_target, yaw):
+    print(math.degrees(yaw))
     madgwick = Madgwick()
     q = np.array([1.0, 0.0, 0.0, 0.0])
     last_time = time.time()
