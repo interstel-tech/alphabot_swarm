@@ -1,24 +1,28 @@
 import serial
 import json
 import redis
-from alphabot.robot import AlphaBot2
 import time
 import math
-from alphabot.imu_helper import HIDDriver, read_accel, read_gyro, convert_units, quaternion_to_yaw
-from ahrs.filters import Madgwick
+import socket
+import select
 import numpy as np
 
+from alphabot.robot import AlphaBot2
+from alphabot.imu_helper import HIDDriver, read_accel, read_gyro, convert_units, quaternion_to_yaw
+from ahrs.filters import Madgwick
+
 Ab = AlphaBot2()
-madgwick = Madgwick()
 d = HIDDriver()
+madgwick = Madgwick()
 imu_addr = 0x69
 DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=1)
 r = redis.Redis(host='localhost', port=6379, db=0)
-CURRENT_TARGET = (None, None)
+
 
 def cleanup():
     DWM.write(b"\r")
     DWM.close()
+
 
 def get_position():
     while True:
@@ -39,31 +43,42 @@ def get_position():
             print(f"[WARN] No POS in line: {data}")
             continue
 
-def set_position(x_target, y_target, yaw):
-    print(math.degrees(yaw))
-    madgwick = Madgwick()
+
+def set_position(x_target, y_target, yaw_offset, sock):
     q = np.array([1.0, 0.0, 0.0, 0.0])
     last_time = time.time()
     d.write_byte_data(imu_addr, 0x06, 0x01)
     d.write_byte_data(imu_addr, 0x3F, 0x00)
-    Ab.setPWMA(25)
-    Ab.setPWMB(25)
+    Ab.setPWMA(22)
+    Ab.setPWMB(22)
 
-    last_time = time.time()
     x_pos, y_pos = get_position()
+    target_angle = math.atan2(y_target - y_pos, x_target - x_pos) - math.radians(yaw_offset)
+    print(f"Target angle: {math.degrees(target_angle)}°")
 
-    target_angle = math.atan2(y_target - y_pos, x_target - x_pos) - math.radians(yaw)
     print("Rotating to target...")
-    if target_angle > 0:
-        Ab.left()
-    else:
-        Ab.right()
-    initial_sign = math.copysign(1, yaw - target_angle)
+
+    Ab.left() if target_angle > 0 else Ab.right()
+    initial_sign = math.copysign(1, math.radians(yaw_offset) - target_angle)
 
     while True:
+        # Non-blocking check for UDP command
+        if select.select([sock], [], [], 0)[0]:
+            data1, _ = sock.recvfrom(1024)
+            message = json.loads(data1.decode('utf-8'))
+            new_col = message.get("s", {}).get("col", None)
+            if new_col and len(new_col) >= 2:
+                new_x, new_y = float(new_col[0]), float(new_col[1])
+                if (new_x, new_y) != (x_target, y_target):
+                    print(f"❌ Interrupted! New target: {new_x}, {new_y}")
+                    Ab.stop()
+                    return math.degrees(yaw)
+
+        # IMU update
         now = time.time()
         dt = now - last_time
         last_time = now
+
         accel_raw = read_accel(d, imu_addr)
         gyro_raw = read_gyro(d, imu_addr)
         if None in accel_raw.values() or None in gyro_raw.values():
@@ -77,18 +92,28 @@ def set_position(x_target, y_target, yaw):
         print(f"Yaw Error: {angle_error:.2f}")
         if abs(angle_error) < 5 or math.copysign(1, angle_error) != initial_sign:
             break
-    Ab.stop()
 
+    Ab.stop()
     print("Moving to target...")
 
-    # Initialize current position with starting estimate
-    current_x = x_pos
-    current_y = y_pos
+    current_x, current_y = x_pos, y_pos
 
     while True:
         now = time.time()
         dt = now - last_time
         last_time = now
+
+        # Non-blocking check for UDP interrupt
+        if select.select([sock], [], [], 0)[0]:
+            data1, _ = sock.recvfrom(1024)
+            message = json.loads(data1.decode('utf-8'))
+            new_col = message.get("s", {}).get("col", None)
+            if new_col and len(new_col) >= 2:
+                new_x, new_y = float(new_col[0]), float(new_col[1])
+                if (new_x, new_y) != (x_target, y_target):
+                    print(f"❌ Interrupted! New target: {new_x}, {new_y}")
+                    Ab.stop()
+                    return math.degrees(yaw)
 
         # IMU update
         accel_raw = read_accel(d, imu_addr)
@@ -99,7 +124,7 @@ def set_position(x_target, y_target, yaw):
         q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
         if q is not None:
             yaw = quaternion_to_yaw(q)
-        yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+        yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
 
         # UWB position update
         data = DWM.readline().decode("utf-8").strip()
@@ -118,10 +143,8 @@ def set_position(x_target, y_target, yaw):
                 Ab.stop()
                 break
 
-        # Recalculate desired angle based on latest position
-        dynamic_target_angle = math.atan2(y_target - current_y, x_target - current_x)
-
         # Yaw correction
+        dynamic_target_angle = math.atan2(y_target - current_y, x_target - current_x)
         yaw_error = math.degrees(yaw - dynamic_target_angle)
         print(f"Yaw Drift: {yaw_error:.2f}")
 
@@ -133,6 +156,9 @@ def set_position(x_target, y_target, yaw):
             Ab.left()
         else:
             Ab.forward()
+
+        time.sleep(0.01)
+
     Ab.stop()
     print(math.degrees(yaw))
     return math.degrees(yaw)

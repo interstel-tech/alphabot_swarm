@@ -33,10 +33,10 @@ def RunAlphabotController():
                 if current_target == last_target:
                     print(f"🔁 Duplicate target ({x_target}, {y_target}) — skipping.")
                     continue
-
+                
                 print(f"🛰️ Received new target: x = {x_target}, y = {y_target}")
                 r.set("target", json.dumps({"x": x_target, "y": y_target}))
-                yaw = set_position(x_target, y_target, yaw)
+                yaw = set_position(x_target, y_target, yaw, sock)
                 last_target = current_target
                 print(f"✅ Updated yaw: {yaw}")
 
