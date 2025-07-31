@@ -6,6 +6,7 @@ import math
 import socket
 import select
 import numpy as np
+import csv
 
 from alphabot.robot import AlphaBot2
 from alphabot.imu_helper import HIDDriver, read_accel, read_gyro, convert_units, quaternion_to_yaw
@@ -18,30 +19,14 @@ imu_addr = 0x69
 DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=1)
 # r = redis.Redis(host='localhost', port=6379, db=0)
 
-
 def cleanup():
     DWM.write(b"\r")
     DWM.close()
 
-
-# def get_position():
-#     while True:
-#         data = DWM.readline().decode("utf-8").strip()
-#         if "POS" in data:
-#             try:
-#                 parts = data.split(",")
-#                 current_x = float(parts[parts.index("POS") + 1])
-#                 current_y = float(parts[parts.index("POS") + 2])
-#                 pos_json = json.dumps({"x": current_x, "y": current_y})
-#                 print("✅", pos_json)
-#                 # r.set("pos", pos_json)
-#                 return current_x, current_y
-#             except Exception as e:
-#                 print(f"[WARN] Bad POS line: {data}")
-#                 continue
-#         else:
-#             print(f"[WARN] No POS in line: {data}")
-#             continue
+def log_position_to_csv(x, y, filename="trajectory.csv"):
+    with open(filename, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow([x, y])
 
 def get_position():
     positions = []
@@ -154,6 +139,9 @@ def set_position(x_target, y_target, yaw_offset, sock):
         yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
 
         current_x, current_y = get_position()
+
+        # Log current position to CSV
+        log_position_to_csv(current_x, current_y)
 
         if abs(current_x - x_target) < 0.1 and abs(current_y - y_target) < 0.1:
             Ab.stop()
