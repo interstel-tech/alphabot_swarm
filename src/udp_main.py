@@ -6,7 +6,7 @@ import RPi.GPIO as GPIO
 from alphabot.position import set_position, cleanup
 
 def RunAlphabotController():
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    # r = redis.Redis(host='localhost', port=6379, db=0)
     udp_ip = "0.0.0.0"
     udp_port = 50001
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -35,7 +35,7 @@ def RunAlphabotController():
                     continue
                 
                 print(f"🛰️ Received new target: x = {x_target}, y = {y_target}")
-                r.set("target", json.dumps({"x": x_target, "y": y_target}))
+                # r.set("target", json.dumps({"x": x_target, "y": y_target}))
                 yaw = set_position(x_target, y_target, yaw, sock)
                 last_target = current_target
                 print(f"✅ Updated yaw: {yaw}")

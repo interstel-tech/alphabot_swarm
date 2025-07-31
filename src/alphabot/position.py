@@ -16,7 +16,7 @@ d = HIDDriver()
 madgwick = Madgwick()
 imu_addr = 0x69
 DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=1)
-r = redis.Redis(host='localhost', port=6379, db=0)
+# r = redis.Redis(host='localhost', port=6379, db=0)
 
 
 def cleanup():
@@ -24,24 +24,51 @@ def cleanup():
     DWM.close()
 
 
+# def get_position():
+#     while True:
+#         data = DWM.readline().decode("utf-8").strip()
+#         if "POS" in data:
+#             try:
+#                 parts = data.split(",")
+#                 current_x = float(parts[parts.index("POS") + 1])
+#                 current_y = float(parts[parts.index("POS") + 2])
+#                 pos_json = json.dumps({"x": current_x, "y": current_y})
+#                 print("✅", pos_json)
+#                 # r.set("pos", pos_json)
+#                 return current_x, current_y
+#             except Exception as e:
+#                 print(f"[WARN] Bad POS line: {data}")
+#                 continue
+#         else:
+#             print(f"[WARN] No POS in line: {data}")
+#             continue
+
 def get_position():
-    while True:
+    positions = []
+
+    while len(positions) < 5:
         data = DWM.readline().decode("utf-8").strip()
         if "POS" in data:
             try:
                 parts = data.split(",")
                 current_x = float(parts[parts.index("POS") + 1])
                 current_y = float(parts[parts.index("POS") + 2])
-                pos_json = json.dumps({"x": current_x, "y": current_y})
-                print("✅", pos_json)
-                r.set("pos", pos_json)
-                return current_x, current_y
+                positions.append((current_x, current_y))
+                # print(f"✅ Reading {len(positions)}: x={current_x}, y={current_y}")
             except Exception as e:
                 print(f"[WARN] Bad POS line: {data}")
                 continue
         else:
             print(f"[WARN] No POS in line: {data}")
             continue
+
+    # Compute average x and y
+    avg_x = sum(p[0] for p in positions) / len(positions)
+    avg_y = sum(p[1] for p in positions) / len(positions)
+    pos_json = json.dumps({"x": avg_x, "y": avg_y})
+    print("Average position:", pos_json)
+    # r.set("pos", pos_json)
+    return avg_x, avg_y
 
 
 def set_position(x_target, y_target, yaw_offset, sock):
@@ -126,34 +153,47 @@ def set_position(x_target, y_target, yaw_offset, sock):
             yaw = quaternion_to_yaw(q)
         yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
 
-        # UWB position update
-        data = DWM.readline().decode("utf-8").strip()
-        if "POS" in data:
-            try:
-                parts = data.split(",")
-                current_x = float(parts[parts.index("POS") + 1])
-                current_y = float(parts[parts.index("POS") + 2])
-                pos_json = json.dumps({"x": current_x, "y": current_y})
-                print("✅", pos_json)
-                r.set("pos", pos_json)
-            except:
-                continue
+        current_x, current_y = get_position()
 
-            if abs(current_x - x_target) < 0.05 and abs(current_y - y_target) < 0.05:
-                Ab.stop()
-                break
+        if abs(current_x - x_target) < 0.1 and abs(current_y - y_target) < 0.1:
+            Ab.stop()
+            break
 
         # Yaw correction
         dynamic_target_angle = math.atan2(y_target - current_y, x_target - current_x)
         yaw_error = math.degrees(yaw - dynamic_target_angle)
+        # print(f"Yaw: {math.degrees(yaw):.2f}")
+        # print(f"Target Angle: {math.degrees(dynamic_target_angle):.2f}")
         print(f"Yaw Drift: {yaw_error:.2f}")
 
         if yaw_error > 10:
             print("↩️ Correcting right")
             Ab.right()
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
+            time.sleep(0.1)
+            Ab.stop()
         elif yaw_error < -10:
             print("↪️ Correcting left")
             Ab.left()
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
+            time.sleep(0.1)
+            Ab.stop()
         else:
             Ab.forward()
 
