@@ -6,7 +6,7 @@ import math
 import socket
 import select
 import numpy as np
-import csv
+# import csv
 
 from alphabot.robot import AlphaBot2
 from alphabot.imu_helper import HIDDriver, read_accel, read_gyro, convert_units, quaternion_to_yaw
@@ -23,10 +23,10 @@ def cleanup():
     DWM.write(b"\r")
     DWM.close()
 
-def log_position_to_csv(x, y, filename="trajectory.csv"):
-    with open(filename, mode="a", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow([x, y])
+# def log_position_to_csv(x, y, filename="trajectory.csv"):
+#     with open(filename, mode="a", newline="") as file:
+#         writer = csv.writer(file)
+#         writer.writerow([x, y])
 
 def get_position():
     positions = []
@@ -42,9 +42,11 @@ def get_position():
                 # print(f"✅ Reading {len(positions)}: x={current_x}, y={current_y}")
             except Exception as e:
                 print(f"[WARN] Bad POS line: {data}")
+                Ab.stop()
                 continue
         else:
             print(f"[WARN] No POS in line: {data}")
+            Ab.stop()
             continue
 
     # Compute average x and y
@@ -55,14 +57,13 @@ def get_position():
     # r.set("pos", pos_json)
     return avg_x, avg_y
 
-
 def set_position(x_target, y_target, yaw_offset, sock):
     q = np.array([1.0, 0.0, 0.0, 0.0])
     last_time = time.time()
     d.write_byte_data(imu_addr, 0x06, 0x01)
     d.write_byte_data(imu_addr, 0x3F, 0x00)
     Ab.setPWMA(22)
-    Ab.setPWMB(22)
+    Ab.setPWMB(24.5)
 
     x_pos, y_pos = get_position()
     target_angle = math.atan2(y_target - y_pos, x_target - x_pos) - math.radians(yaw_offset)
@@ -76,7 +77,7 @@ def set_position(x_target, y_target, yaw_offset, sock):
     while True:
         # Non-blocking check for UDP command
         if select.select([sock], [], [], 0)[0]:
-            data1, _ = sock.recvfrom(1024)
+            data1, addr = sock.recvfrom(1024)
             message = json.loads(data1.decode('utf-8'))
             new_col = message.get("s", {}).get("col", None)
             if new_col and len(new_col) >= 2:
@@ -117,7 +118,7 @@ def set_position(x_target, y_target, yaw_offset, sock):
 
         # Non-blocking check for UDP interrupt
         if select.select([sock], [], [], 0)[0]:
-            data1, _ = sock.recvfrom(1024)
+            data1, addr = sock.recvfrom(1024)
             message = json.loads(data1.decode('utf-8'))
             new_col = message.get("s", {}).get("col", None)
             if new_col and len(new_col) >= 2:
@@ -138,12 +139,17 @@ def set_position(x_target, y_target, yaw_offset, sock):
             yaw = quaternion_to_yaw(q)
         yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
 
+        # Get position
         current_x, current_y = get_position()
 
-        # Log current position to CSV
-        log_position_to_csv(current_x, current_y)
+        # Send position back to sender
+        position_message = json.dumps({"pos": {"x": current_x, "y": current_y}})
+        sock.sendto(position_message.encode('utf-8'), addr)
 
-        if abs(current_x - x_target) < 0.1 and abs(current_y - y_target) < 0.1:
+        # Log current position to CSV
+        # log_position_to_csv(current_x, current_y)
+
+        if abs(current_x - x_target) < 0.05 and abs(current_y - y_target) < 0.05:
             Ab.stop()
             break
 
@@ -166,7 +172,7 @@ def set_position(x_target, y_target, yaw_offset, sock):
             if q is not None:
                 yaw = quaternion_to_yaw(q)
             yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
-            time.sleep(0.1)
+            time.sleep(0.2)
             Ab.stop()
         elif yaw_error < -10:
             print("↪️ Correcting left")
@@ -180,7 +186,7 @@ def set_position(x_target, y_target, yaw_offset, sock):
             if q is not None:
                 yaw = quaternion_to_yaw(q)
             yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
-            time.sleep(0.1)
+            time.sleep(0.2)
             Ab.stop()
         else:
             Ab.forward()
@@ -190,3 +196,123 @@ def set_position(x_target, y_target, yaw_offset, sock):
     Ab.stop()
     print(math.degrees(yaw))
     return math.degrees(yaw)
+
+def set_vector(x_target, y_target, yaw_offset, sock):
+    q = np.array([1.0, 0.0, 0.0, 0.0])
+    last_time = time.time()
+    d.write_byte_data(imu_addr, 0x06, 0x01)
+    d.write_byte_data(imu_addr, 0x3F, 0x00)
+    Ab.setPWMA(22)
+    Ab.setPWMB(24.5)
+
+    # Get current position and initial angle to target
+    current_x, current_y = get_position()
+    target_angle = math.atan2(y_target - current_y, x_target - current_x) - math.radians(yaw_offset)
+    print(f"Initial target angle: {math.degrees(target_angle)}°")
+
+    # Rotate to face target
+    Ab.left() if target_angle > 0 else Ab.right()
+    initial_sign = math.copysign(1, math.radians(yaw_offset) - target_angle)
+
+    while True:
+        # Non-blocking check for UDP command
+        if select.select([sock], [], [], 0)[0]:
+            data, addr = sock.recvfrom(1024)
+            message = json.loads(data.decode('utf-8'))
+            new_col = message.get("s", {}).get("col", None)
+            if new_col and len(new_col) >= 2:
+                x_target, y_target = float(new_col[0]), float(new_col[1])
+                print(f"📡 New vector: {x_target}, {y_target}")
+                current_x, current_y = get_position()
+                target_angle = math.atan2(y_target - current_y, x_target - current_x) - math.radians(yaw_offset)
+                initial_sign = math.copysign(1, math.radians(yaw_offset) - target_angle)
+                Ab.stop()
+                Ab.left() if target_angle > 0 else Ab.right()
+
+        # IMU update
+        now = time.time()
+        dt = now - last_time
+        last_time = now
+
+        accel_raw = read_accel(d, imu_addr)
+        gyro_raw = read_gyro(d, imu_addr)
+        if None in accel_raw.values() or None in gyro_raw.values():
+            continue
+        acc, gyr = convert_units(accel_raw, gyro_raw)
+        q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+        if q is not None:
+            yaw = quaternion_to_yaw(q)
+        yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7
+        angle_error = math.degrees(yaw - target_angle)
+        print(f"Yaw Error: {angle_error:.2f}")
+
+        if abs(angle_error) < 5 or math.copysign(1, angle_error) != initial_sign:
+            Ab.stop()
+            break
+
+        time.sleep(0.01)
+
+    # Move forward indefinitely and dynamically update direction
+    print("➡️ Moving forward indefinitely...")
+    while True:
+        if select.select([sock], [], [], 0)[0]:
+            data, addr = sock.recvfrom(1024)
+            message = json.loads(data.decode('utf-8'))
+            new_col = message.get("s", {}).get("col", None)
+            if new_col and len(new_col) >= 2:
+                x_target, y_target = float(new_col[0]), float(new_col[1])
+                print(f"📡 New vector: {x_target}, {y_target}")
+                # Get position
+                current_x, current_y = get_position()
+
+                # Send position back to sender
+                position_message = json.dumps({"pos": {"x": current_x, "y": current_y}})
+                sock.sendto(position_message.encode('utf-8'), addr)
+
+                target_angle = math.atan2(y_target - current_y, x_target - current_x) - math.radians(yaw_offset)
+
+        accel_raw = read_accel(d, imu_addr)
+        gyro_raw = read_gyro(d, imu_addr)
+        if None in accel_raw.values() or None in gyro_raw.values():
+            continue
+        acc, gyr = convert_units(accel_raw, gyro_raw)
+        q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+        if q is not None:
+            yaw = quaternion_to_yaw(q)
+        yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
+
+        dynamic_target_angle = math.atan2(y_target - current_y, x_target - current_x)
+        yaw_error = math.degrees(yaw - dynamic_target_angle)
+        print(f"Yaw Drift: {yaw_error:.2f}")
+
+        if yaw_error > 10:
+            print("↩️ Correcting right")
+            Ab.right()
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
+            time.sleep(0.2)
+            Ab.stop()
+        elif yaw_error < -10:
+            print("↪️ Correcting left")
+            Ab.left()
+            accel_raw = read_accel(d, imu_addr)
+            gyro_raw = read_gyro(d, imu_addr)
+            if None in accel_raw.values() or None in gyro_raw.values():
+                continue
+            acc, gyr = convert_units(accel_raw, gyro_raw)
+            q = madgwick.updateIMU(q=q, gyr=gyr, acc=acc)
+            if q is not None:
+                yaw = quaternion_to_yaw(q)
+            yaw = ((yaw + math.pi) % (2 * math.pi) - math.pi) * 9.7 + math.radians(yaw_offset)
+            time.sleep(0.2)
+            Ab.stop()
+        else:
+            Ab.forward()
+        time.sleep(0.01)

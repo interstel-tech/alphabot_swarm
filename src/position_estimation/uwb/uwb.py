@@ -4,7 +4,7 @@ import json
 import redis
 
 # Redis setup
-r = redis.Redis(host='localhost', port=6379, db=0)
+# r = redis.Redis(host='localhost', port=6379, db=0)
 
 # Serial setup with timeout
 DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=1)
@@ -39,7 +39,7 @@ try:
                 pos = {"x": x, "y": y}
                 pos_json = json.dumps(pos)
                 print("✅", pos_json)
-                r.set("pos", pos_json)
+                # r.set("pos", pos_json)
                 missed = 0
             except Exception as e:
                 print("⚠️ Parse error:", e)
