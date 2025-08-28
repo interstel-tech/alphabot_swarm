@@ -288,7 +288,7 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
 
         if yaw_error > 10:
             print("↩️ Correcting right")
-            Ab.right()
+            Ab.left()
             accel_raw = read_accel(d, imu_addr)
             gyro_raw = read_gyro(d, imu_addr)
             if None in accel_raw.values() or None in gyro_raw.values():
@@ -302,7 +302,7 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
             Ab.stop()
         elif yaw_error < -10:
             print("↪️ Correcting left")
-            Ab.left()
+            Ab.right()
             accel_raw = read_accel(d, imu_addr)
             gyro_raw = read_gyro(d, imu_addr)
             if None in accel_raw.values() or None in gyro_raw.values():
