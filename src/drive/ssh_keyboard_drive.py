@@ -81,12 +81,20 @@ try:
             active_key = key
 
             if key == "w":
+                Ab.setPWMA(50)
+                Ab.setPWMB(50)
                 Ab.forward()
             elif key == "a":
+                Ab.setPWMA(25)
+                Ab.setPWMB(25)
                 Ab.left()
             elif key == "s":
+                Ab.setPWMA(50)
+                Ab.setPWMB(50)
                 Ab.backward()
             elif key == "d":
+                Ab.setPWMA(25)
+                Ab.setPWMB(25)
                 Ab.right()
             elif key == "q":
                 print("Quitting...")

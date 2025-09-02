@@ -9,6 +9,7 @@ def RunAlphabotController():
     # r = redis.Redis(host='localhost', port=6379, db=0)
     udp_ip = "0.0.0.0"
     udp_port = 50001
+    addr = (udp_ip, udp_port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((udp_ip, udp_port))
     print(f"Listening for JSON commands on UDP port {udp_port}...")
@@ -31,7 +32,7 @@ def RunAlphabotController():
 
                 # Skip if target hasn't changed
                 if current_target == last_target:
-                    print(f"🔁 Duplicate target ({x_target}, {y_target}) — skipping.")
+                    print(f"🔁 Duplicate vector ({x_target}, {y_target}) — skipping.")
                     continue
                 
                 print(f"🛰️ Received new target: x = {x_target}, y = {y_target}")
