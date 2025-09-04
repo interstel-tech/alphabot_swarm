@@ -43,40 +43,16 @@ def cleanup():
 #             print(f"[WARN] No POS in line: {data}")
 #             continue
 
-# Global yaw state
-yaw_global = 0.0
-last_yaw_time = time.time()
-
 def normalize360(angle: float) -> float:
     return (angle + 360) % 360
 
-def update_yaw():
-    """Integrate gyro z-axis to update global yaw."""
-    global yaw_global, last_yaw_time
-    now = time.time()
-    dt = now - last_yaw_time
-    last_yaw_time = now
-
-    gyro_raw = read_gyro(d, imu_addr)
-    if None in gyro_raw.values():
-        return yaw_global
-
-    # Convert gyro units (deg/s or rad/s -> consistent units)
-    _, gyr = convert_units({"x": 0, "y": 0, "z": 0}, gyro_raw)
-    gz = gyr[2]  # rotation around z-axis
-
-    yaw_global += math.degrees(gz * dt)
-    yaw_global = normalize360(yaw_global)
-    return yaw_global
-
-def get_position(num_samples=5):
+def get_position(num_samples=3):
     """Get averaged position and continuously update yaw."""
     positions = []
 
     while len(positions) < num_samples:
         data = DWM.readline().decode("utf-8").strip()
         # Always update yaw even if POS data isn't received
-        current_yaw = update_yaw()
 
         if "POS" in data:
             try:
@@ -93,11 +69,9 @@ def get_position(num_samples=5):
     avg_x = sum(p[0] for p in positions) / len(positions)
     avg_y = sum(p[1] for p in positions) / len(positions)
 
-    pos_json = json.dumps({"x": avg_x, "y": avg_y, "yaw": current_yaw})
-    print("Average position and yaw:", pos_json)
+    pos_json = json.dumps({"x": avg_x, "y": avg_y})
 
-    # r.set("pos", pos_json)  # optionally store in Redis
-    return avg_x, avg_y, current_yaw
+    return avg_x, avg_y
 
 def set_position(x_target, y_target, yaw_offset, sock):
     q = np.array([1.0, 0.0, 0.0, 0.0])
@@ -231,9 +205,10 @@ def set_position(x_target, y_target, yaw_offset, sock):
     print(math.degrees(yaw))
     return math.degrees(yaw)
 
-def signed_error(yaw: float, target: float) -> float:
-    """Return shortest signed difference in [-180, 180]."""
-    return (target - yaw + 180) % 360 - 180
+def signed_error(yaw, target):
+    error = (target - yaw + 180) % 360 - 180
+    return error
+
     
 def set_vector(x_vector, y_vector, yaw_offset, sock):
     yaw = 0.0
@@ -244,6 +219,8 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
     Ab.setPWMA(22)
     Ab.setPWMB(24)
 
+    current_x, current_y = get_position()
+
     # --- Compute target angle ---
     target_angle = math.degrees(math.atan2(y_vector, x_vector)) - yaw_offset
     target_angle = normalize360(target_angle)
@@ -253,10 +230,13 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
     print("Rotating to target...")
     Ab.left()  # always CCW
 
+    # Save addr from first UDP command so we can reply
+    addr = None  
+
     while True:
         # Non-blocking UDP check
         if select.select([sock], [], [], 0)[0]:
-            data1, _ = sock.recvfrom(1024)
+            data1, addr = sock.recvfrom(1024)
             message = json.loads(data1.decode("utf-8"))
             new_col = message.get("s", {}).get("col", None)
             if new_col and len(new_col) >= 2:
@@ -282,7 +262,11 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
 
         print(f"Yaw: {yaw:.2f} | Target: {target_angle:.2f}")
 
-        # stop once we reach or slightly pass the target
+        # --- Send yaw update back ---
+        if addr:
+            pos_json = json.dumps({"x": current_x, "y": current_y, "yaw": yaw})
+            sock.sendto(pos_json.encode("utf-8"), addr)
+
         if yaw >= target_angle - 2:
             break
 
@@ -297,7 +281,7 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
 
         # Non-blocking UDP check
         if select.select([sock], [], [], 0)[0]:
-            data1, _ = sock.recvfrom(1024)
+            data1, addr = sock.recvfrom(1024)
             message = json.loads(data1.decode("utf-8"))
             new_col = message.get("s", {}).get("col", None)
             if new_col and len(new_col) >= 2:
@@ -314,6 +298,8 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
         _, gyr = convert_units({"x": 0, "y": 0, "z": 0}, gyro_raw)
         gz = gyr[2]
 
+        current_x, current_y = get_position()
+
         yaw += math.degrees(gz * dt)
         yaw = normalize360(yaw)
 
@@ -324,12 +310,19 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
         if yaw_error > 10:
             print("↩️ Correcting left")
             Ab.left()
-            time.sleep(0.05)
+            time.sleep(0.1)
+            Ab.stop()
         elif yaw_error < -10:
             print("↪️ Correcting right")
             Ab.right()
-            time.sleep(0.05)
+            time.sleep(0.1)
+            Ab.stop()
         else:
             Ab.forward()
+
+        # --- Send continuous updates ---
+        if addr:
+            pos_json = json.dumps({"x": current_x, "y": current_y, "yaw": yaw})
+            sock.sendto(pos_json.encode("utf-8"), addr)
 
         time.sleep(0.01)
