@@ -46,7 +46,7 @@ def cleanup():
 def normalize360(angle: float) -> float:
     return (angle + 360) % 360
 
-def get_position(num_samples=3):
+def get_position(num_samples=1):
     """Get averaged position and continuously update yaw."""
     positions = []
 
@@ -263,9 +263,9 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
         print(f"Yaw: {yaw:.2f} | Target: {target_angle:.2f}")
 
         # --- Send yaw update back ---
-        if addr:
-            pos_json = json.dumps({"x": current_x, "y": current_y, "yaw": yaw})
-            sock.sendto(pos_json.encode("utf-8"), addr)
+        # if addr:
+        #     pos_json = json.dumps({"x": current_x, "y": current_y, "yaw": yaw})
+        #     sock.sendto(pos_json.encode("utf-8"), addr)
 
         if yaw >= target_angle - 2:
             break
@@ -310,19 +310,21 @@ def set_vector(x_vector, y_vector, yaw_offset, sock):
         if yaw_error > 10:
             print("↩️ Correcting left")
             Ab.left()
-            time.sleep(0.1)
-            Ab.stop()
+            time.sleep(0.05)
+            # time.sleep(0.1)
+            # Ab.stop()
         elif yaw_error < -10:
             print("↪️ Correcting right")
             Ab.right()
-            time.sleep(0.1)
-            Ab.stop()
+            time.sleep(0.05)
+            # time.sleep(0.1)
+            # Ab.stop()
         else:
             Ab.forward()
 
         # --- Send continuous updates ---
-        if addr:
-            pos_json = json.dumps({"x": current_x, "y": current_y, "yaw": yaw})
-            sock.sendto(pos_json.encode("utf-8"), addr)
+        # if addr:
+        #     pos_json = json.dumps({"x": current_x, "y": current_y, "yaw": yaw})
+        #     sock.sendto(pos_json.encode("utf-8"), addr)
 
         time.sleep(0.01)
