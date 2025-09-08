@@ -29,7 +29,7 @@ IF (${CROSS_TYPE} MATCHES "arm" OR ${CROSS_TYPE} MATCHES "iobc" OR ${CROSS_TYPE}
 ENDIF()
 # -----------------------------------------------
 set(USE_COSMOS_FROM "SOURCE")
-include(${COSMOS_SOURCE_CORE}/cmake/use_cosmos_from_source.cmake)
+# include(${COSMOS_SOURCE_CORE}/cmake/use_cosmos_from_source.cmake) # included by the sttr2020 dependency
 message("COSMOS: ${COSMOS}")
 set(CMAKE_INSTALL_PREFIX "${COSMOS}/${PROJECT_NAME}" CACHE PATH "default install path" FORCE )
 message("Install: ${CMAKE_INSTALL_PREFIX}")
