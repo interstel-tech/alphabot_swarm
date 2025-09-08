@@ -7,12 +7,13 @@ if (ENABLE_ASSEMBLY)
     enable_language(ASM)
 endif()
 
-# COSMOS core dependency
+# COSMOS dependencies
 set(COSMOS_CORE_GIT_TAG "35db329906e2071")
 include(cmake/add-cosmos-dependency.cmake)
+include(cmake/add-sttr2020-dependency.cmake)
 
 add_executable(swarm_child src/agent/swarm_child.cpp src/agent/swarm_params.h)
 target_link_libraries(swarm_child CosmosAgent)
 add_executable(swarm_controller src/agent/swarm_controller.cpp src/agent/swarm_params.h)
-target_link_libraries(swarm_controller CosmosAgent)
+target_link_libraries(swarm_controller CosmosAgent MacHcl SwarmSimulator)
 
