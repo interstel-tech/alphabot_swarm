@@ -26,7 +26,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 1. Compile: make swarm_child.cpp and swarm_controller
 2. Run ./swarm_controller on all robots 
 3. Run ./swarm_child on all robots
-Note: All robots must be setup starting at 0 degrees (facing +x-direction) to correctly calculate angle 
+**Note:** All robots must be setup starting at 0 degrees (facing +x-direction) to correctly calculate angle 
 
 ### Programs:
 1. ssh_keyboard_drive.py: Control robot with WASD
