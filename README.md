@@ -18,7 +18,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 ## Setup
 
 ### Ultra-Wideband Sensors
-1. Download the [Decawave Software Package](https://www.qorvo.com/products/d/da008423).  
+1. Download the **Decawave Software Package**.  
 2. Flash the UWB sensors using **J-Flash Lite**.  
 3. Use the **Decawave Android app** to configure sensors as anchors or tags.  
 
