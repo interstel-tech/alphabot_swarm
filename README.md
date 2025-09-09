@@ -28,7 +28,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 3. Run ./swarm_child on all robots
 Note: All robots must be setup starting at 0 degrees (facing +x-direction) to correctly calculate angle 
 
-## Programs:
+### Programs:
 1. ssh_keyboard_drive.py: Control robot with WASD
 2. imu.py: Reads orientation data using IMU 
 3. uwb.py: Reads x,y position data using UWB sensors
