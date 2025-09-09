@@ -13,6 +13,9 @@ Initial work performed by **RI** for STTR Phase 2E.
 - 4 × SparkFun ICM-20948 (IMU)  
 - 4 × CP2112 (I2C–USB Converters)  
 
+## Robot Preview
+<img src="./images/robot.png" alt="AlphaBot Robot" width="300"/>
+
 ## Setup
 
 ### Ultra-Wideband Sensors
@@ -28,9 +31,6 @@ Initial work performed by **RI** for STTR Phase 2E.
 3. Run ./swarm_child on all robots
 
 **Note:** All robots must be setup starting at 0 degrees (facing +x-direction) to correctly calculate angle 
-
-## Robot Preview
-<img src="./images/robot.png" alt="AlphaBot Robot" width="300"/>
 
 ### Programs:
 1. ssh_keyboard_drive.py: Control robot with WASD
