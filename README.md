@@ -30,8 +30,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 **Note:** All robots must be setup starting at 0 degrees (facing +x-direction) to correctly calculate angle 
 
 ## Robot Preview
-<img src="./images/robot.png" alt="AlphaBot Robot" width="500"/>
-
+<img src="./images/robot.png" alt="AlphaBot Robot" width="300"/>
 
 ### Programs:
 1. ssh_keyboard_drive.py: Control robot with WASD
