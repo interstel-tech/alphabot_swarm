@@ -13,8 +13,6 @@ Initial work performed by **RI** for STTR Phase 2E.
 - 4 × SparkFun ICM-20948 (IMU)  
 - 4 × CP2112 (I2C–USB Converters)  
 
----
-
 ## Setup
 
 ### Ultra-Wideband Sensors
@@ -22,9 +20,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 2. Flash the UWB sensors using **J-Flash Lite**.  
 3. Use the **Decawave Android app** to configure sensors as anchors or tags.  
 
-📖 Full guide: [Precise Real-Time Indoor Localization with Raspberry Pi and UWB](https://medium.com/@newforestberlin/precise-realtime-indoor-localization-with-raspberry-pi-and-ultra-wideband-technology-decawave-191e4e2daa8c)  
-
----
+📖 Full guide: [Precise Real-Time Indoor Localization with Raspberry Pi and UWB](https://medium.com/@newforestberlin/precise-realtime-indoor-localization-with-raspberry-pi-and-ultra-wideband-technology-decawave-191e4e2daa8c) 
 
 ### Setup Swarm Controller (for programs in /commands)
 1. Compile: make swarm_child.cpp and swarm_controller
