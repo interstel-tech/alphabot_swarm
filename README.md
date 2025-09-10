@@ -8,8 +8,8 @@ Initial work performed by **RI** for STTR Phase 2E.
 ## Requirements
 
 ### Hardware
-- 4 × AlphaBot2-Pi  
-- 7 × Decawave MDEK1001 (UWB sensors)  
+- 4 × AlphaBot2-Pi 
+- 8 × Decawave MDEK1001 (UWB sensors)   
 - 4 × SparkFun ICM-20948 (IMU)  
 - 4 × CP2112 (I2C–USB Converters)  
 
@@ -21,7 +21,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 ### Ultra-Wideband Sensors
 1. Download the **Decawave Software Package**.  
 2. Flash the UWB sensors using **J-Flash Lite**.  
-3. Use the **Decawave Android app** to configure sensors as anchors or tags.  
+3. Use the **Decawave Android app** to configure sensors as anchors or tags. The maximum anchors allowed in the software is 4.
 
 📖 Full guide: [Precise Real-Time Indoor Localization with Raspberry Pi and UWB](https://medium.com/@newforestberlin/precise-realtime-indoor-localization-with-raspberry-pi-and-ultra-wideband-technology-decawave-191e4e2daa8c) 
 
