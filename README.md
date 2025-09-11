@@ -16,7 +16,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 - 4 x Mount for UWB, IMU, and I2C-USB converter
 <img src="./images/mount.png" alt="AlphaBot Robot" width="300"/> 
 
-- 8 x Spacer for metal ball wheels
+- 8 x Spacer for ball casters
 <img src="./images/spacer.png" alt="AlphaBot Robot" width="300"/>
 
 **Note:** Spacers may need to be adjusted by +-1mm due to AlphaBot2-Pi tolerance 
