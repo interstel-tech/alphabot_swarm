@@ -1,5 +1,3 @@
-<img width="564" height="744" alt="image" src="https://github.com/user-attachments/assets/43e7e5a3-dc6a-42b6-8297-d95fd909a82b" /># alphabot_swarm
-
 Code to deploy on AlphaBots to test the STTR swarm control algorithms.  
 Initial work performed by **RI** for STTR Phase 2E.
 
