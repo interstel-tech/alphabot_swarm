@@ -12,7 +12,7 @@ Initial work performed by **RI** for STTR Phase 2E.
 - 4 × SparkFun ICM-20948 (IMU)  
 - 4 × CP2112 (I2C–USB Converter)
 
-## 3D Printed Parts
+### 3D Printed Parts
 - 4 x Mount for UWB, IMU, and I2C-USB converter
 <img src="./images/mount.png" alt="AlphaBot Robot" width="300"/> 
 
