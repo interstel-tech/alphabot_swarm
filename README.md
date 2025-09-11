@@ -33,12 +33,14 @@ Initial work performed by **RI** for STTR Phase 2E.
 
 📖 Full guide: [Precise Real-Time Indoor Localization with Raspberry Pi and UWB](https://medium.com/@newforestberlin/precise-realtime-indoor-localization-with-raspberry-pi-and-ultra-wideband-technology-decawave-191e4e2daa8c) 
 
-### Setup Swarm Controller (for programs in /commands)
+### Swarm Controller (for programs in /commands)
 1. Compile: make swarm_child.cpp and swarm_controller
 2. Run ./swarm_controller on all robots 
 3. Run ./swarm_child on all robots
 
 **Note:** For more ideal trajectories, all robots must be setup starting at 0 degrees (facing +x-direction) 
+
+---
 
 ### Programs:
 1. ssh_keyboard_drive.py: Control robot with WASD
