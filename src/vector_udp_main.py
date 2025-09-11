@@ -1,10 +1,8 @@
 import socket
 import json
-import time
-import redis
-import RPi.GPIO as GPIO
-from alphabot.position import set_vector, cleanup
-
+from alphabot.position import AlphaBotDriver
+import faulthandler
+faulthandler.enable()
 def RunAlphabotController():
     # r = redis.Redis(host='localhost', port=6379, db=0)
     udp_ip = "0.0.0.0"
@@ -16,6 +14,8 @@ def RunAlphabotController():
 
     yaw = 0.0
     last_target = (None, None)  # Store last x, y to compare
+
+    alphabot_driver = AlphaBotDriver()
 
     try:
         while True:
@@ -37,20 +37,18 @@ def RunAlphabotController():
                 
                 print(f"🛰️ Received new target: x = {x_target}, y = {y_target}")
                 # r.set("target", json.dumps({"x": x_target, "y": y_target}))
-                yaw = set_vector(x_target, y_target, yaw, sock)
+                yaw = alphabot_driver.set_vector(x_target, y_target, yaw, sock)
                 last_target = current_target
                 print(f"✅ Updated yaw: {yaw}")
 
             except json.JSONDecodeError:
                 print("Received invalid JSON.")
-            except Exception as e:
-                print(f"Error handling data: {e}")
 
     except KeyboardInterrupt:
         print("Stopped by user.")
     finally:
+        alphabot_driver.cleanup()
         sock.close()
-        cleanup()
 
 if __name__ == "__main__":
     RunAlphabotController()
