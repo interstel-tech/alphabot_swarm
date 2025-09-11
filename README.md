@@ -1,4 +1,4 @@
-# alphabot_swarm
+<img width="564" height="744" alt="image" src="https://github.com/user-attachments/assets/43e7e5a3-dc6a-42b6-8297-d95fd909a82b" /># alphabot_swarm
 
 Code to deploy on AlphaBots to test the STTR swarm control algorithms.  
 Initial work performed by **RI** for STTR Phase 2E.
@@ -9,9 +9,15 @@ Initial work performed by **RI** for STTR Phase 2E.
 
 ### Hardware
 - 4 × AlphaBot2-Pi 
-- 8 × Decawave MDEK1001 (UWB sensors)   
+- 8 × Decawave MDEK1001 (UWB sensor)   
 - 4 × SparkFun ICM-20948 (IMU)  
-- 4 × CP2112 (I2C–USB Converters)  
+- 4 × CP2112 (I2C–USB Converter)
+
+## 3D Printed Parts
+<img src="./images/mount.png" alt="AlphaBot Robot" width="300"/> <img src="./images/spacer.png" alt="AlphaBot Robot" width="300"/>
+- 4 x Mount for UWB, IMU, and I2C-USB converter
+- 8 x Spacer for metal ball wheels
+**Note:** Spacers may need to be adjusted by +-1mm due to AlphaBot2-Pi tolerance 
 
 ## Robot Preview
 <img src="./images/robot.png" alt="AlphaBot Robot" width="300"/>
