@@ -50,6 +50,6 @@ Initial work performed by **RI** for STTR Phase 2E.
 5. vector_udp_main.py: Receives x,y vector commands via UDP
 
 ### Known Limitations:
-1. IMU-based angle estimation drifts over time
-2. UWB sensors may ocassionally require a restart (unplug/replug)
-3. If UWB sensors stop receiving telemetry: reinitialize by running /position_estimation/uwb.py
+1. Must initialize UWB sensors by running /position_estimation/uwb.py before running any code
+2. IMU-based angle estimation drifts over time
+3. UWB sensors may ocassionally go down and require a restart (unplug/replug)
