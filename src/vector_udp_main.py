@@ -1,8 +1,10 @@
 import socket
 import json
-from alphabot.position import AlphaBotDriver
+from alphabot.position import AlphaBotDriver, DriveMode
+
 import faulthandler
 faulthandler.enable()
+
 def RunAlphabotController():
     # r = redis.Redis(host='localhost', port=6379, db=0)
     udp_ip = "0.0.0.0"
@@ -34,15 +36,17 @@ def RunAlphabotController():
                 if current_target == last_target:
                     print(f"🔁 Duplicate vector ({x_target}, {y_target}) — skipping.")
                     continue
-                
+
                 print(f"🛰️ Received new target: x = {x_target}, y = {y_target}")
                 # r.set("target", json.dumps({"x": x_target, "y": y_target}))
-                yaw = alphabot_driver.set_vector(x_target, y_target, yaw, sock)
+                alphabot_driver.run_drive_loop(DriveMode.VECTOR, x_target, y_target, sock)
                 last_target = current_target
-                print(f"✅ Updated yaw: {yaw}")
 
             except json.JSONDecodeError:
                 print("Received invalid JSON.")
+            except Exception as e:
+                print(f"Caught exception: {e}")
+                break
 
     except KeyboardInterrupt:
         print("Stopped by user.")

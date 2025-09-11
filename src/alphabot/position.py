@@ -6,6 +6,8 @@ import socket
 import select
 import numpy as np
 import threading
+from enum import Enum
+from typing import Tuple
 
 from alphabot.robot import AlphaBot2
 from alphabot.imu_helper import HIDDriver, read_accel, read_gyro, convert_units, quaternion_to_yaw
@@ -13,6 +15,7 @@ from ahrs.filters import Madgwick
 
 PWMA_SPEED = 22
 PWMB_SPEED = 24.5
+DISTANCE_TOLERANCE = 0.3333  # meters
 
 # Ab = AlphaBot2()
 # d = HIDDriver()
@@ -225,12 +228,31 @@ class PositionSamples:
     def clear(self):
         with self._lock:
             self.samples = []
+    def num_samples(self):
+        with self._lock:
+            return len(self.samples)
     def get_average(self):
         with self._lock:
-            print(f"Calculating average of {len(self.samples)} samples")
             if not self.samples:
-                return (0.0, 0.0)
+                raise ValueError("No position samples available")
+            print(f"Calculating average of {len(self.samples)} samples")
             return (sum(p[0] for p in self.samples) / len(self.samples), sum(p[1] for p in self.samples) / len(self.samples))
+
+class DriveMode(Enum):
+    POSITION = 1
+    VECTOR = 2
+
+def is_within_tolerance(a: Tuple[float, float], b: Tuple[float, float], tol: float) -> bool:
+    return abs(a[0] - b[0]) < tol and abs(a[1] - b[1]) < tol
+
+def mid_angle(a: float, b: float) -> float:
+    """Calculate the mid-angle between two angles in degrees."""
+    a_rad = math.radians(a)
+    b_rad = math.radians(b)
+    x = (math.cos(a_rad) + math.cos(b_rad)) / 2
+    y = (math.sin(a_rad) + math.sin(b_rad)) / 2
+    mid_rad = math.atan2(y, x)
+    return math.degrees(mid_rad) % 360
 
 class AlphaBotDriver():
     def __init__(self):
@@ -240,11 +262,12 @@ class AlphaBotDriver():
         self.imu_addr = 0x69
         self.sock = None
         self.addr = None
+        self.drive_mode = DriveMode.POSITION
         self.positions = PositionSamples()
         self.last_pos = (0.0, 0.0)
         self.yaw = 0.0
-        self.target_pos = (0.0, 0.0)
-        self.target_vel = (0.0, 0.0)
+        self.target_pos: Tuple[float, float] | None = None
+        self.target_vel: Tuple[float, float] = (0.0, 0.0)
         self.is_running: threading.Event = threading.Event()
         self.perform_sampling: threading.Event = threading.Event()
         self.uwb_is_ready: threading.Event = threading.Event()
@@ -280,16 +303,29 @@ class AlphaBotDriver():
             self.DWM.write(b"\r")
             self.DWM.close()
 
-    def udp_listen(self):
+    def did_get_new_target(self):
+        """
+        Poll the UDP socket for new target commands.
+        """
         # Non-blocking UDP check
         if select.select([self.sock], [], [], 0)[0]:
             data1, addr = self.sock.recvfrom(1024)
             message = json.loads(data1.decode("utf-8"))
-            new_col = message.get("s", {}).get("col", None)
-            if new_col and len(new_col) >= 2:
-                new_x, new_y = float(new_col[0]), float(new_col[1])
-                if (new_x, new_y) != (self.target_vel[0], self.target_vel[1]):
-                    print(f"❌ Interrupted! New target: {new_x}, {new_y}")
+            new_pos = message.get("s", {}).get("col", None)
+            new_vel = message.get("v", {}).get("col", None)
+            # Prioritizes position updates over velocity updates
+            if new_pos and len(new_pos) >= 2:
+                new_x, new_y = float(new_pos[0]), float(new_pos[1])
+                if self.drive_mode == DriveMode.VECTOR or (self.drive_mode == DriveMode.POSITION and (new_x, new_y) != (self.target_pos[0], self.target_pos[1])):
+                    self.target_pos = (new_x, new_y)
+                    print(f"❌ Interrupted! New POSITION target: {new_x}, {new_y}")
+                    self.Ab.stop()
+                    return True
+            elif new_vel and len(new_vel) >= 2:
+                new_x, new_y = float(new_vel[0]), float(new_vel[1])
+                if self.drive_mode == DriveMode.POSITION or (self.drive_mode == DriveMode.VECTOR and (new_x, new_y) != (self.target_vel[0], self.target_vel[1])):
+                    self.target_vel = (new_x, new_y)
+                    print(f"❌ Interrupted! New VELOCITY target: {new_x}, {new_y}")
                     self.Ab.stop()
                     return True
         return False
@@ -340,21 +376,24 @@ class AlphaBotDriver():
         Rotate to face target direction.
         """
         # Reducing speed to improve turning accuracy and to not overshoot
-        self.Ab.setPWMA(PWMA_SPEED * 0.75)
-        self.Ab.setPWMB(PWMB_SPEED * 0.75)
+        self.Ab.setPWMA(PWMA_SPEED * 0.8)
+        self.Ab.setPWMB(PWMB_SPEED * 0.8)
 
-        # --- Compute target angle ---
-        target_angle = math.degrees(math.atan2(self.target_vel[1], self.target_vel[0]))
-        # Flag for printing
-        turning_left = None
-        # Used for calculating dt for IMU integration
-        last_loop_time = time.time()
+        first_time = True
 
         while True:
             # Non-blocking UDP check
-            if self.udp_listen():
+            if first_time or self.did_get_new_target():
                 self.Ab.stop()
-                return False
+                # --- Compute target angle ---
+                if self.drive_mode == DriveMode.POSITION and self.target_pos:
+                    current_pos = self.positions.get_average()
+                    self.target_vel = (self.target_pos[0] - current_pos[0], self.target_pos[1] - current_pos[1])
+                # TODO: Handle zero velocity case
+                target_angle = math.degrees(math.atan2(self.target_vel[1], self.target_vel[0]))
+                turning_left = None
+                last_loop_time = time.time()
+                first_time = False
             
             yaw_error = signed_error(self.yaw, target_angle)
             print(f"Yaw: {self.yaw:.2f} | Yaw Error: {yaw_error:.2f}")
@@ -376,15 +415,10 @@ class AlphaBotDriver():
             self.imu_update(current_time - last_loop_time)
             last_loop_time = current_time
 
-            # --- Send yaw update back ---
-            # if addr:
-            #     pos_json = json.dumps({"x": current_x, "y": current_y, "yaw": yaw})
-            #     sock.sendto(pos_json.encode("utf-8"), addr)
             time.sleep(0.01)
 
         self.Ab.stop()
         print("✅ Rotation complete. Moving to target...")
-        return True
 
     def move_forward(self, duration=1.0):
         self.Ab.setPWMA(PWMA_SPEED)
@@ -396,6 +430,9 @@ class AlphaBotDriver():
         # --- Move forward with drift tracking ---
         self.Ab.forward()
         while time.time() - duration_start_time < duration:
+            # Non-blocking UDP check
+            if self.did_get_new_target():
+                break
             # IMU integration
             current_time = time.time()
             self.imu_update(current_time - last_loop_time)
@@ -404,41 +441,73 @@ class AlphaBotDriver():
         self.Ab.stop()
 
     def estimate_position_and_yaw(self, duration=1.0):
+        """
+        Estimate new position and yaw after moving forward.
+        Uses the collected position samples to compute an average position,
+        then estimates yaw based on movement direction and averages it with IMU yaw.
+        """
         # --- Estimate position over duration ---
         time.sleep(duration)
         current_pos = self.positions.get_average()
         # Get an estimate of the yaw and average it with the IMU yaw
         est_yaw = math.degrees(math.atan2(current_pos[1] - self.last_pos[1], current_pos[0] - self.last_pos[0]))
         est_yaw = normalize360(est_yaw)
-        print(f"Estimated Position: {current_pos}, Estimated Yaw: {est_yaw:.2f}°, IMU Yaw: {self.yaw:.2f}°")
-        self.yaw = (est_yaw + self.yaw) / 2
-        self.yaw = normalize360(self.yaw)
 
-    def set_vector(self, x_vector, y_vector, yaw_offset, sock):
-        self.target_vel = (x_vector, y_vector)
-        self.yaw = yaw_offset
+        print(f"Estimated Position: {current_pos}, Estimated Yaw: {est_yaw:.2f}°, IMU Yaw: {self.yaw:.2f}°")
+        self.yaw = mid_angle(self.yaw, est_yaw)
+
+    def run_drive_loop(self, drive_mode: DriveMode, x: float, y: float, sock):
+        """
+        Run the drive loop for the specified drive mode and target position/velocity.
+        This function will block until the target is reached (for POSITION mode)
+        or until interrupted by a new target (for both modes).
+        Parameters:
+        - drive_mode: DriveMode.POSITION or DriveMode.VECTOR
+        - x, y: Target position (for POSITION mode) or velocity vector (for VECTOR mode)
+        - sock: UDP socket for receiving new target commands
+        Returns:
+        - None
+        """
+        self.drive_mode = drive_mode
+        if drive_mode == DriveMode.POSITION:
+            self.target_pos = (x, y)
+        elif drive_mode == DriveMode.VECTOR:
+            self.target_vel = (x, y)
         self.sock = sock
         self.addr = None
-        #
+
+        # Ensure we have some initial position samples
+        if self.positions.num_samples() < 3:
+            self.perform_sampling.set()
+            time.sleep(0.5)
+
         while self.is_running.is_set():
             while self.uwb_is_ready.is_set():
                 # Turn to target direction
-                if not self.correct_orientation():
-                    return self.yaw
+                self.correct_orientation()
                 # Lock in current position as last known
                 self.last_pos = self.positions.get_average()
                 self.perform_sampling.clear()
                 self.positions.clear()
+                # Send position update back to controller
+                pos_json = json.dumps({"x": self.last_pos[0], "y": self.last_pos[1]})
+                if self.sock and self.addr:
+                    self.sock.sendto(pos_json.encode('utf-8'), self.addr)
                 # Move forward a bit
+                # TODO: Handle overshooting caused by constant velocity and duration
                 self.move_forward(duration=2.0)
-                # Start position sampling and estimate new position
+                # Resume position sampling and estimate new position
                 self.perform_sampling.set()
-                self.estimate_position_and_yaw(duration=0.75)
+                self.estimate_position_and_yaw(duration=0.5)
+                # Check if we reached the target (for POSITION mode)
+                if (self.drive_mode == DriveMode.POSITION and is_within_tolerance(self.positions.get_average(), self.target_pos, DISTANCE_TOLERANCE)):
+                    print(f"✅ Reached target position: {self.target_pos}")
+                    self.Ab.stop()
+                    self.perform_sampling.clear()
+                    return
             # TODO: Handle UWB failure (e.g., reinitialize)
             raise RuntimeError("UWB module failure detected. Please reinitialize UWB module")
         self.Ab.stop()
         self.perform_sampling.clear()
+        return
 
-# Note to self:
-# make sure to clear position list afterwards
-# Add mutex to position list access if needed
