@@ -73,14 +73,15 @@ cmake --build --list-presets
 Example configuration and build for the `linux-debug` preset:
 ```
 cmake --preset linux-debug
-cmake --build --preset linux-debug -j4
+cmake --build --preset linux-debug -j4 --target swarm_child swarm_controller copy_agent
 ```
 Example configuration and build for the `rpi-debug` preset:
 See the section below for installing the RPI cross-compiler first before building for RPI.
 ```
 cmake --preset rpi-debug
-cmake --build --preset rpi-debug -j4
+cmake --build --preset rpi-debug -j4 --target swarm_child swarm_controller copy_agent
 ```
+The compiled binaries will be in the build/<rpi/linux>-<debug/release> folder.
 
 # Installing the RPI Cross-compiler
 The Raspberry PI on the AlphaBot uses version 2.36 of GLIBC, so the latest version of the toolchain we can use is version 12.

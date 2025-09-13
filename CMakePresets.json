@@ -25,7 +25,8 @@
           "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
           "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
           "CMAKE_BUILD_TYPE": "Debug",
-          "CROSS_TYPE": "rpi"
+          "CROSS_TYPE": "rpi",
+          "CROSS_TYPE_arm": "True"
         }
       },
       {
@@ -40,7 +41,8 @@
           "COMPILER_PREPROCESSOR_FLAGS": "-D'BASE_REVISION_NUMBER=$(REV)' -D'BASE_REVISION_HASH_SHORT=$(REVHASH_SHORT)' -D'BASE_REVISION_HASH=$(REVHASH)'",
           "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
           "CMAKE_BUILD_TYPE": "Release",
-          "CROSS_TYPE": "rpi"
+          "CROSS_TYPE": "rpi",
+          "CROSS_TYPE_arm": "True"
         }
       },
       {
