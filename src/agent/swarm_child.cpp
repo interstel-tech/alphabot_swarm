@@ -155,8 +155,8 @@ void handleMessage(const std::string& msgstr)
     agent->cinfo->node.loc.pos.lvlh = node_state.lvlh;
     agent->cinfo->node.loc.pos.lvlh.utc = currentmjd();
     std::string state_json = node_state.to_json().dump();
-    cout << "Updated node state: " << state_json << endl;
-    // agent->post(Agent::AgentMessage::REQUEST, "node_state " + node_state.to_json().dump());
+    cout << "Posting updated node state: " << state_json << endl;
+    agent->post(Agent::AgentMessage::REQUEST, "node_state " + node_state.to_json().dump());
 }
 
 // ==========================================================================

@@ -58,6 +58,10 @@ int32_t request_set_swarm_formation(string &request, string &response, Agent *ag
  * @brief Set the desired swarm position
  */
 int32_t request_set_swarm_position(string &request, string &response, Agent *agent);
+/**
+ * @brief Endpoint for node agents to report their state
+ */
+int32_t request_node_state(string &request, string &response, Agent *agent);
 
 // ==========================================================================
 // Entrypoint
@@ -74,7 +78,7 @@ int main()
     }
     agent->add_request("set_swarm_formation", request_set_swarm_formation, "'{\"shape\":\"line\"|\"ngon\",\"sep\":<separation>}'", "Set the desired swarm formation");
     agent->add_request("set_swarm_position", request_set_swarm_position, "'{\"angle\":0-360, \"pos\":{x:0,y:0,z:0}}'","Set the desired swarm position");
-
+    agent->add_request("node_state", request_node_state, "'{\"nodename\":\"<nodename>\", \"lvlh\":{<cartpos>}}'","Update the state of a swarm node");
     agent->cinfo->agent0.aprd = .5;
     agent->start_active_loop();
     while (agent->running())
@@ -256,18 +260,28 @@ int32_t request_set_swarm_position(string &request, string &response, Agent*)
 
 int32_t request_node_state(string &request, string &response, Agent*)
 {
-    vector<string> args = string_split(request);
     response.clear();
-
-    if (args.size() < 2)
+    std::size_t find_arg = request.find_first_of(" ");
+    if (find_arg == std::string::npos)
     {
-        response = "Error: Not enough arguments";
+        response = "Error: No arguments found in request";
+        cerr << response << endl;
         return 0;
     }
-    NodeState node_state;
-    node_state.from_json(args[1]);
-    
-    // setSwarmPositions();
+    string arg = request.substr(find_arg + 1);
 
+    NodeState node_state;
+    node_state.from_json(arg);
+    for (size_t i = 0; i < swarm_positions.size(); ++i)
+    {
+        if (swarm_positions[i].nodename == node_state.nodename)
+        {
+            swarm_positions[i] = node_state;
+            cout << "Updated position for node " << node_state.nodename << ": " << node_state.lvlh.to_json().dump() << endl;
+            return 0;
+        }
+    }
+    response = "Error: Node name not recognized: " + node_state.nodename;
+    cerr << response << endl;
     return 0;
 }
