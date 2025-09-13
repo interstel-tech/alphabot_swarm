@@ -225,7 +225,9 @@ class PositionSamples:
     def add(self, v):
         print(f"Adding position sample: {v}, total samples: {len(self.samples)+1}")
         with self._lock:
-            self.samples.append(v)
+            # Bound to last 600 samples (~1 minute at 10 Hz)
+            if len(self.samples) < 600:
+                self.samples.append(v)
     def atomic_clear_and_add(self, v):
         with self._lock:
             self.samples = [v]
@@ -260,22 +262,30 @@ def mid_angle(a: float, b: float) -> float:
 
 class AlphaBotDriver():
     def __init__(self):
-        self.Ab = AlphaBot2()
-        self.d = HIDDriver()
-        self.DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=1)
-        self.imu_addr = 0x69
-        self.sock = None
-        self.addr = None
+        """
+        Initialize the AlphaBot driver with UWB and IMU.
+        Parameters:
+        - sock: UDP socket for receiving new target commands
+        - addr: Address for sending position updates, as (ip, port) tuple
+        """
+        self.Ab = AlphaBot2()                   # AlphaBot2 driver library
+        self.d = HIDDriver()                    # IMU driver
+        self.imu_addr = 0x69                    # I2C address for the IMU
+        self.DWM = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=1) # UWB serial connection
+        self.sock = None                        # UDP socket for sending back telemetry
+        self.addr = None                        # Address to send telemetry to
         self.drive_mode = DriveMode.POSITION
-        self.positions = PositionSamples()
-        self.last_pos = (0.0, 0.0)
-        self.yaw = 0.0
-        self.target_pos: Tuple[float, float] | None = None
-        self.target_vel: Tuple[float, float] = (0.0, 0.0)
-        self.is_running: threading.Event = threading.Event()
-        self.perform_sampling: threading.Event = threading.Event()
-        self.uwb_is_ready: threading.Event = threading.Event()
-        self.sampling_thread = threading.Thread(target=self.position_sampler, daemon=True)
+        self.in_motion = False                  # Flag to indicate if the robot is currently moving
+        self.positions = PositionSamples()      # Thread-safe position samples storage
+        self.last_pos = (0.0, 0.0)              # Last known position
+        self.yaw = 0.0                          # Current yaw angle in degrees
+        self.target_pos: Tuple[float, float] | None = None          # Target position (x, y)
+        self.target_vel: Tuple[float, float] = (0.0, 0.0)           # Target velocity vector (vx, vy)
+        self.is_running: threading.Event = threading.Event()        # Flag to control threads and shutdown process
+        self.perform_sampling: threading.Event = threading.Event()  # Flag to control when to sample positions
+        self.uwb_is_ready: threading.Event = threading.Event()      # Flag to indicate UWB readiness
+        self.sampling_thread = threading.Thread(target=self.position_sampler, daemon=True)  # Thread for continuous UWB position sampling
+        self.feedback_thread = threading.Thread(target=self.feedback_loop, daemon=True)    # Thread for sending position feedback
         # Initialize IMU and motors
         self.d.write_byte_data(self.imu_addr, 0x06, 0x01)
         self.d.write_byte_data(self.imu_addr, 0x3F, 0x00)
@@ -291,6 +301,8 @@ class AlphaBotDriver():
         self.perform_sampling.clear()
         self.last_pos = self.positions.get_average()
         print(f"Initial position: {self.last_pos}")
+        # Start feedback thread
+        self.feedback_thread.start()
 
     def __del__(self):
         self.cleanup()
@@ -340,27 +352,47 @@ class AlphaBotDriver():
         for estimation when enabled via the perform_sampling event.
         """
         failure_count = 0
-        while self.is_running.is_set() and self.uwb_is_ready.is_set():
-            data = self.DWM.readline().decode("utf-8").strip()
-            if "POS" in data:
-                try:
-                    parts = data.split(",")
-                    current_x = float(parts[parts.index("POS") + 1])
-                    current_y = float(parts[parts.index("POS") + 2])
-                    if self.perform_sampling.is_set():
-                        self.positions.add((current_x, current_y))
-                    else:
-                        # Only keep one sample when not sampling
-                        self.positions.atomic_clear_and_add((current_x, current_y))
-                except Exception as e:
-                    print(f"[WARN] Bad POS line: {data}, {e}")
-                    continue
-            else:
-                print(f"[WARN] No POS in line: {data}")
-                failure_count += 1
-                if failure_count > 5:
-                    print(f"Exiting program. Please reinitialize UWB module.")
-                    self.uwb_is_ready.clear()
+        while self.is_running.is_set():
+            while self.uwb_is_ready.is_set():
+                data = self.DWM.readline().decode("utf-8").strip()
+                if "POS" in data:
+                    try:
+                        parts = data.split(",")
+                        current_x = float(parts[parts.index("POS") + 1])
+                        current_y = float(parts[parts.index("POS") + 2])
+                        if self.perform_sampling.is_set():
+                            self.positions.add((current_x, current_y))
+                        else:
+                            # Only keep one sample when not sampling
+                            self.positions.atomic_clear_and_add((current_x, current_y))
+                    except Exception as e:
+                        print(f"[WARN] Bad POS line: {data}, {e}")
+                        continue
+                else:
+                    print(f"[WARN] No POS in line: {data}")
+                    failure_count += 1
+                    if failure_count > 3:
+                        self.uwb_is_ready.clear()
+                        failure_count = 0
+            # UWB lost, try to reconnect
+            print("🔁 UWB lost, attempting to reconnect...")
+            connect_uwb(self.DWM, return_after_stable=True)
+            self.uwb_is_ready.set()
+
+    def feedback_loop(self):
+        """
+        Continuously sends the node agent the current position and velocity in the background.
+        """
+        while self.is_running.is_set():
+            time.sleep(2.0)
+            if self.sock is None or self.addr is None:
+                continue
+            current_x, current_y = self.positions.get_average()
+            current_vx = 0.5 * math.cos(math.radians(self.yaw)) if self.in_motion else 0.0
+            current_vy = 0.5 * math.sin(math.radians(self.yaw)) if self.in_motion else 0.0
+            pos_json = json.dumps({"s": {"col": [current_x, current_y]}, "v": {"col": [current_vx, current_vy]}})
+            print(f"📡 Sending position: {pos_json}")
+            self.sock.sendto(pos_json.encode("utf-8"), self.addr)
 
     def imu_update(self, dt):
         # IMU integration
@@ -431,6 +463,7 @@ class AlphaBotDriver():
         last_loop_time = time.time()
         # --- Move forward with drift tracking ---
         self.Ab.forward()
+        self.in_motion = True
         while time.time() - duration_start_time < duration:
             # Non-blocking UDP check
             if self.did_get_new_target():
@@ -441,6 +474,7 @@ class AlphaBotDriver():
             last_loop_time = current_time
             time.sleep(0.01)
         self.Ab.stop()
+        self.in_motion = False
 
     def estimate_position_and_yaw(self, duration=1.0):
         """
@@ -458,7 +492,7 @@ class AlphaBotDriver():
         print(f"Estimated Position: {current_pos}, Estimated Yaw: {est_yaw:.2f}°, IMU Yaw: {self.yaw:.2f}°")
         self.yaw = mid_angle(self.yaw, est_yaw)
 
-    def run_drive_loop(self, drive_mode: DriveMode, x: float, y: float, sock):
+    def run_drive_loop(self, drive_mode: DriveMode, x: float, y: float, sock, addr):
         """
         Run the drive loop for the specified drive mode and target position/velocity.
         This function will block until the target is reached (for POSITION mode)
@@ -467,16 +501,17 @@ class AlphaBotDriver():
         - drive_mode: DriveMode.POSITION or DriveMode.VECTOR
         - x, y: Target position (for POSITION mode) or velocity vector (for VECTOR mode)
         - sock: UDP socket for receiving new target commands
+        - addr: Address for sending position updates
         Returns:
         - None
         """
+        self.sock = sock
+        self.addr = addr
         self.drive_mode = drive_mode
         if drive_mode == DriveMode.POSITION:
             self.target_pos = (x, y)
         elif drive_mode == DriveMode.VECTOR:
             self.target_vel = (x, y)
-        self.sock = sock
-        self.addr = None
 
         # Ensure we have some initial position samples
         if self.positions.num_samples() < 3:
@@ -490,6 +525,7 @@ class AlphaBotDriver():
                 if (self.drive_mode == DriveMode.POSITION and is_within_tolerance(self.positions.get_average(), self.target_pos, DISTANCE_TOLERANCE)):
                     print(f"✅ Reached target position: {self.target_pos}")
                     self.Ab.stop()
+                    self.in_motion = False
                     self.perform_sampling.clear()
                     return
 
@@ -500,20 +536,14 @@ class AlphaBotDriver():
                 self.last_pos = self.positions.get_average()
                 self.perform_sampling.clear()
                 self.positions.clear()
-                # Send position update back to controller
-                pos_json = json.dumps({"x": self.last_pos[0], "y": self.last_pos[1]})
-                if self.sock and self.addr:
-                    self.sock.sendto(pos_json.encode('utf-8'), self.addr)
                 # Move forward a bit
-                # TODO: Handle overshooting caused by constant velocity and duration
+                # TODO: Improve this logic to move the exact distance to the target
                 self.move_forward(duration=2.0)
                 # Resume position sampling and estimate new position
                 self.perform_sampling.set()
                 self.estimate_position_and_yaw(duration=0.33)
-            # UWB lost, try to reconnect
-            print("🔁 UWB lost, attempting to reconnect...")            
-            connect_uwb(self.DWM, return_after_stable=True)
         self.Ab.stop()
+        self.in_motion = False
         self.perform_sampling.clear()
         return
 

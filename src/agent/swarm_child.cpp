@@ -152,9 +152,11 @@ void handleMessage(const std::string& msgstr)
     NodeState node_state;
     node_state.nodename = nodename;
     node_state.lvlh.from_json(msgstr);
+    agent->cinfo->node.loc.pos.lvlh = node_state.lvlh;
+    agent->cinfo->node.loc.pos.lvlh.utc = currentmjd();
     std::string state_json = node_state.to_json().dump();
-    agent->post(Agent::AgentMessage::REQUEST, "node_state " + node_state.to_json().dump());
-
+    cout << "Updated node state: " << state_json << endl;
+    // agent->post(Agent::AgentMessage::REQUEST, "node_state " + node_state.to_json().dump());
 }
 
 // ==========================================================================
@@ -171,8 +173,6 @@ int32_t request_desired_position_swarm(string &request, string &response, Agent*
     }
     string arg = request.substr(find_arg + 1);
 
-    NodeState node_state;
-    node_state.from_json(arg);
     string estring;
     json11::Json jargs = json11::Json::parse(arg, estring);
     if (!estring.empty())
@@ -205,7 +205,7 @@ int32_t request_desired_position_swarm(string &request, string &response, Agent*
         break;
     }
 
-    int32_t iretn = socket_sendto(sock_out, node_state.lvlh.to_json().dump());
+    int32_t iretn = socket_sendto(sock_out, lvlh_json);
     if (iretn < 0)
     {
         response = "Error in socket_sendto: (" + std::to_string(iretn) + ") " + cosmos_error_string(iretn);
