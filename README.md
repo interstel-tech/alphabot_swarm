@@ -58,3 +58,39 @@ Example configuration and build for the `linux-debug` preset:
 cmake --preset linux-debug
 cmake --build --preset linux-debug -j4
 ```
+
+# Installing the RPI Cross-compiler
+The Raspberry PI on the AlphaBot uses version 2.36 of GLIBC, so the latest version of the toolchain we can use is version 12.
+```
+localuser@raspberrypi:~ $ ldd --version
+ldd (Debian GLIBC 2.36-9+rpt2+deb12u7) 2.36
+Copyright (C) 2022 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+Written by Roland McGrath and Ulrich Drepper.
+```
+
+The toolchain can be found here: https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads
+
+Arm GNU Toolchain
+Version 12.2.Rel1
+x86_64 Linux hosted cross toolchains
+AArch32 GNU/Linux target with hard float (arm-none-linux-gnueabihf)
+
+Change folders to the /opt folder to use as the root install directory for toolchains:
+```
+cd /opt
+```
+Download the toolchain:
+```
+sudo wget https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-x86_64-arm-none-linux-gnueabihf.tar.xz
+```
+Extract:
+```
+sudo tar xvf arm-gnu-toolchain-12.2.rel1-x86_64-arm-none-linux-gnueabihf.tar.xz
+```
+Remove the compressed file, which we no longer need:
+```
+sudo rm arm-gnu-toolchain-12.2.rel1-x86_64-arm-none-linux-gnueabihf.tar.xz
+```
+
