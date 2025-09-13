@@ -1,5 +1,4 @@
 # alphabot_swarm
-
 Code to deploy on AlphaBots to test the STTR swarm control algorithms.  
 Initial work performed by **RI** for STTR Phase 2E.
 
@@ -8,10 +7,19 @@ Initial work performed by **RI** for STTR Phase 2E.
 ## Requirements
 
 ### Hardware
-- 4 × AlphaBot2-Pi  
-- 7 × Decawave MDEK1001 (UWB sensors)  
+- 4 × AlphaBot2-Pi 
+- 8 × Decawave MDEK1001 (UWB sensor)   
 - 4 × SparkFun ICM-20948 (IMU)  
-- 4 × CP2112 (I2C–USB Converters)  
+- 4 × CP2112 (I2C–USB Converter)
+
+### 3D Printed Parts
+- 4 x Mount for UWB, IMU, and I2C-USB converter
+<img src="./images/mount.png" alt="AlphaBot Robot" width="300"/> 
+
+- 8 x Spacer for ball casters
+<img src="./images/spacer.png" alt="AlphaBot Robot" width="300"/>
+
+**Note:** Spacers may need to be adjusted by +-1mm due to AlphaBot2-Pi tolerance 
 
 ## Robot Preview
 <img src="./images/robot.png" alt="AlphaBot Robot" width="300"/>
@@ -21,16 +29,18 @@ Initial work performed by **RI** for STTR Phase 2E.
 ### Ultra-Wideband Sensors
 1. Download the **Decawave Software Package**.  
 2. Flash the UWB sensors using **J-Flash Lite**.  
-3. Use the **Decawave Android app** to configure sensors as anchors or tags.  
+3. Use the **Decawave Android app** to configure sensors as anchors or tags. The maximum anchors allowed in the software is 4.
 
 📖 Full guide: [Precise Real-Time Indoor Localization with Raspberry Pi and UWB](https://medium.com/@newforestberlin/precise-realtime-indoor-localization-with-raspberry-pi-and-ultra-wideband-technology-decawave-191e4e2daa8c) 
 
-### Setup Swarm Controller (for programs in /commands)
+### Swarm Controller (for programs in /commands)
 1. Compile: make swarm_child.cpp and swarm_controller
 2. Run ./swarm_controller on all robots 
 3. Run ./swarm_child on all robots
 
-**Note:** All robots must be setup starting at 0 degrees (facing +x-direction) to correctly calculate angle 
+**Note:** For more ideal trajectories, all robots must be setup starting at 0 degrees (facing +x-direction) 
+
+---
 
 ### Programs:
 1. ssh_keyboard_drive.py: Control robot with WASD
@@ -44,6 +54,9 @@ Initial work performed by **RI** for STTR Phase 2E.
 2. UWB sensors may ocassionally require a restart (unplug/replug)
 3. If UWB sensors stop receiving telemetry: reinitialize by running /position_estimation/uwb.py
 
+1. Must initialize UWB sensors by running /position_estimation/uwb.py before running any code
+2. IMU-based angle estimation drifts over time
+3. UWB sensors may ocassionally go down and require a restart (unplug/replug)
 
 ## Configure & Build
 This repo uses CMakePresets for its build configurations.
