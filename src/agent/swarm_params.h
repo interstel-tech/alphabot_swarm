@@ -18,7 +18,7 @@ struct SwarmState
     //! Current formation type
     SwarmFormationType formation_type = SwarmFormationType::LINE;
     //! Separation of the swarm nodes (in meters)
-    double separation = 0.5;
+    double separation = 1.0;
     //! Reference location of the swarm formation
     Convert::cartpos ref_location;
     //! Angle of the swarm formation (in degrees),

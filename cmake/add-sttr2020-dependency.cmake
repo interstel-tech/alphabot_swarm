@@ -17,8 +17,8 @@ FetchContent_GetProperties(cosmos_sttr2020)
 if(NOT cosmos_sttr2020_POPULATED)
     message("Populating cosmos_sttr2020 dependency...")
     FetchContent_Populate(cosmos_sttr2020)
-    add_subdirectory(${cosmos_sttr2020_SOURCE_DIR}/source ${cosmos_sttr2020_BINARY_DIR}/source)
-
+    add_subdirectory(${cosmos_sttr2020_SOURCE_DIR}/source ${cosmos_sttr2020_BINARY_DIR}/source EXCLUDE_FROM_ALL)
+    include_directories(${cosmos_sttr2020_SOURCE_DIR}/source/libraries)
 endif()
 # -----------------------------------------------
 # -----------------------------------------------

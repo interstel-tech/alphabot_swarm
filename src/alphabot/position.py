@@ -12,10 +12,11 @@ from typing import Tuple
 from alphabot.robot import AlphaBot2
 from alphabot.imu_helper import HIDDriver, read_accel, read_gyro, convert_units, quaternion_to_yaw
 from ahrs.filters import Madgwick
+from sensors.uwb import connect_uwb
 
 PWMA_SPEED = 22
-PWMB_SPEED = 24.5
-DISTANCE_TOLERANCE = 0.3333  # meters
+PWMB_SPEED = 25
+DISTANCE_TOLERANCE = 0.25  # meters
 
 # Ab = AlphaBot2()
 # d = HIDDriver()
@@ -225,6 +226,9 @@ class PositionSamples:
         print(f"Adding position sample: {v}, total samples: {len(self.samples)+1}")
         with self._lock:
             self.samples.append(v)
+    def atomic_clear_and_add(self, v):
+        with self._lock:
+            self.samples = [v]
     def clear(self):
         with self._lock:
             self.samples = []
@@ -272,17 +276,14 @@ class AlphaBotDriver():
         self.perform_sampling: threading.Event = threading.Event()
         self.uwb_is_ready: threading.Event = threading.Event()
         self.sampling_thread = threading.Thread(target=self.position_sampler, daemon=True)
-        # Set initial flags
-        self.is_running.set()
-        self.uwb_is_ready.set()
         # Initialize IMU and motors
         self.d.write_byte_data(self.imu_addr, 0x06, 0x01)
         self.d.write_byte_data(self.imu_addr, 0x3F, 0x00)
         # Initialize Ultra Wide Band
-        self.DWM.write(b"\r\r")
-        time.sleep(0.5)
-        self.DWM.write(b"lep\r")
-        time.sleep(0.5)
+        connect_uwb(self.DWM, return_after_stable=True)
+        # Set initial flags
+        self.uwb_is_ready.set()
+        self.is_running.set()
         # Start position sampler thread and get initial position
         self.sampling_thread.start()
         self.perform_sampling.set()
@@ -349,7 +350,8 @@ class AlphaBotDriver():
                     if self.perform_sampling.is_set():
                         self.positions.add((current_x, current_y))
                     else:
-                        print(f"Sampled: {current_x}, {current_y}")
+                        # Only keep one sample when not sampling
+                        self.positions.atomic_clear_and_add((current_x, current_y))
                 except Exception as e:
                     print(f"[WARN] Bad POS line: {data}, {e}")
                     continue
@@ -376,8 +378,8 @@ class AlphaBotDriver():
         Rotate to face target direction.
         """
         # Reducing speed to improve turning accuracy and to not overshoot
-        self.Ab.setPWMA(PWMA_SPEED * 0.8)
-        self.Ab.setPWMB(PWMB_SPEED * 0.8)
+        self.Ab.setPWMA(PWMA_SPEED * 0.9)
+        self.Ab.setPWMB(PWMB_SPEED * 0.9)
 
         first_time = True
 
@@ -479,10 +481,19 @@ class AlphaBotDriver():
         # Ensure we have some initial position samples
         if self.positions.num_samples() < 3:
             self.perform_sampling.set()
-            time.sleep(0.5)
+            time.sleep(0.4)
 
         while self.is_running.is_set():
             while self.uwb_is_ready.is_set():
+                # --- Exit Conditions ---
+                # Check if we reached the target (for POSITION mode)
+                if (self.drive_mode == DriveMode.POSITION and is_within_tolerance(self.positions.get_average(), self.target_pos, DISTANCE_TOLERANCE)):
+                    print(f"✅ Reached target position: {self.target_pos}")
+                    self.Ab.stop()
+                    self.perform_sampling.clear()
+                    return
+
+                # --- Main Drive Logic ---
                 # Turn to target direction
                 self.correct_orientation()
                 # Lock in current position as last known
@@ -498,15 +509,10 @@ class AlphaBotDriver():
                 self.move_forward(duration=2.0)
                 # Resume position sampling and estimate new position
                 self.perform_sampling.set()
-                self.estimate_position_and_yaw(duration=0.5)
-                # Check if we reached the target (for POSITION mode)
-                if (self.drive_mode == DriveMode.POSITION and is_within_tolerance(self.positions.get_average(), self.target_pos, DISTANCE_TOLERANCE)):
-                    print(f"✅ Reached target position: {self.target_pos}")
-                    self.Ab.stop()
-                    self.perform_sampling.clear()
-                    return
-            # TODO: Handle UWB failure (e.g., reinitialize)
-            raise RuntimeError("UWB module failure detected. Please reinitialize UWB module")
+                self.estimate_position_and_yaw(duration=0.33)
+            # UWB lost, try to reconnect
+            print("🔁 UWB lost, attempting to reconnect...")            
+            connect_uwb(self.DWM, return_after_stable=True)
         self.Ab.stop()
         self.perform_sampling.clear()
         return

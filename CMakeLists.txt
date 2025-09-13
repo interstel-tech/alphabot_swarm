@@ -24,3 +24,10 @@ add_executable(swarm_controller
 )
 target_link_libraries(swarm_controller CosmosAgent MacHcl SwarmSimulator Threads::Threads)
 
+# Create a custom target to copy the agent binary to the build directory for easy access
+add_custom_target(copy_agent ALL
+    COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_FILE:agent>
+            ${CMAKE_BINARY_DIR}/$<TARGET_FILE_NAME:agent>
+    DEPENDS agent
+)

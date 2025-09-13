@@ -9,30 +9,27 @@
 #include "agent/agentclass.h"
 #include "support/convertdef.h" // for cartpos
 #include "support/convertlib.h" // for ric2lvlh
+#include "helpers/common.h"
+#include "helpers/sph_helper.h"
 
 // ==========================================================================
 // Static variables
 namespace
 {
-    struct NodeState
-    {
-        string nodename;
-        Convert::cartpos lvlh;
-        json11::Json to_json() const {
-            return json11::Json::object {
-                { "nodename" , nodename },
-                { "lvlh", lvlh },
-            };
-        }
-    };
     Agent *agent;
-    vector<string> swarm_nodenames = {"child_01", "child_02", "child_03", "child_04"};
+    vector<string> swarm_nodenames = {"child_01", "child_02", "child_03"};//, "child_04"};
     //! Stores the positioning request as in LVLH
     vector<NodeState> swarm_positions;
     //! Stores the desired positions for the swarm children
     vector<NodeState> desired_swarm_positions;
     //! Swarm state as represented by the controller
     SwarmState desired_swarm_state;
+
+    //! Sph helper module for collision avoidance
+    SphModule sph_module;
+
+    //! Keep track of which nodes have reported back their state within the current time window
+    // int nodes_reported = 0;
 }
 
 // ==========================================================================
@@ -57,6 +54,10 @@ void setSwarmPositions();
  * @brief Set the desired swarm formation
  */
 int32_t request_set_swarm_formation(string &request, string &response, Agent *agent);
+/**
+ * @brief Set the desired swarm position
+ */
+int32_t request_set_swarm_position(string &request, string &response, Agent *agent);
 
 // ==========================================================================
 // Entrypoint
@@ -71,13 +72,15 @@ int main()
         agent->debug_log.Printf("Error starting agent\n");
         exit(iretn);
     }
-    agent->add_request("set_swarm_formation", request_set_swarm_formation, "'{\"shape\":\"line\"|\"ngon\",\"sep\":<separation>", "Set the desired swarm formation");
+    agent->add_request("set_swarm_formation", request_set_swarm_formation, "'{\"shape\":\"line\"|\"ngon\",\"sep\":<separation>}'", "Set the desired swarm formation");
+    agent->add_request("set_swarm_position", request_set_swarm_position, "'{\"angle\":0-360, \"pos\":{x:0,y:0,z:0}}'","Set the desired swarm position");
 
     agent->cinfo->agent0.aprd = .5;
     agent->start_active_loop();
     while (agent->running())
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // if (nodes_reported )
         setSwarmPositions();
     }
 }
@@ -93,6 +96,10 @@ void initSwarmObjects()
         swarm_positions[i].nodename = swarm_nodenames[i];
         desired_swarm_positions[i].nodename = swarm_nodenames[i];
     }
+    // sph_module.initialize(swarm_nodenames);
+    // temp adjustment
+    desired_swarm_state.ref_location.s.col[0] = 2;
+    desired_swarm_state.ref_location.s.col[1] = 1.25;
 }
 
 void convertFormationShapeToPositions()
@@ -147,6 +154,108 @@ void setSwarmPositions()
 // Agent requests
 int32_t request_set_swarm_formation(string &request, string &response, Agent*)
 {
+    response.clear();
+    std::size_t find_arg = request.find_first_of(" ");
+    if (find_arg == std::string::npos)
+    {
+        response = "Error: No arguments found in request";
+        cerr << response << endl;
+        return 0;
+    }
+    string arg = request.substr(find_arg + 1);
+
+    string estring;
+    json11::Json jargs = json11::Json::parse(arg, estring);
+    if (!estring.empty())
+    {
+        response = "Error: Invalid JSON format in arguments, e: " + estring;
+        return 0;
+    }
+    if (!jargs.is_object())
+    {
+        response = "Error: Arguments should be a JSON object";
+        return 0;
+    }
+    if (jargs["shape"].is_string())
+    {
+        string shape = jargs["shape"].string_value();
+        if (swarm_formation_type_map.find(shape) == swarm_formation_type_map.end())
+        {
+            response = "Error: Invalid formation shape: " + shape;
+            return 0;
+        }
+        desired_swarm_state.formation_type = swarm_formation_type_map[shape];
+    }
+    if (jargs["sep"].is_number())
+    {
+        double sep = jargs["sep"].number_value();
+        if (sep <= 0)
+        {
+            response = "Error: Separation must be a positive number! Got: " + std::to_string(sep);
+            return 0;
+        }
+        desired_swarm_state.separation = sep;
+    }
+    if (jargs["angle"].is_number())
+    {
+        double angle = jargs["angle"].number_value();
+        desired_swarm_state.angle = angle;
+    }
+    setSwarmPositions();
+
+    return 0;
+}
+
+int32_t request_set_swarm_position(string &request, string &response, Agent*)
+{
+    response.clear();
+    std::size_t find_arg = request.find_first_of(" ");
+    if (find_arg == std::string::npos)
+    {
+        response = "Error: No arguments found in request";
+        cerr << response << endl;
+        return 0;
+    }
+    string arg = request.substr(find_arg + 1);
+
+    string estring;
+    json11::Json jargs = json11::Json::parse(arg, estring);
+    if (!estring.empty())
+    {
+        response = "Error: Invalid JSON format in arguments, e: " + estring;
+        return 0;
+    }
+    if (!jargs.is_object())
+    {
+        response = "Error: Arguments should be a JSON object";
+        return 0;
+    }
+    if (jargs["angle"].is_number())
+    {
+        desired_swarm_state.angle = jargs["angle"].number_value();
+    }
+    if (jargs["pos"].is_object())
+    {
+        if (jargs["pos"].object_items().count("x") && jargs["pos"].object_items().at("x").is_number())
+        {
+            desired_swarm_state.ref_location.s.col[0] = jargs["pos"].object_items().at("x").number_value();
+        }
+        if (jargs["pos"].object_items().count("y") && jargs["pos"].object_items().at("y").is_number())
+        {
+            desired_swarm_state.ref_location.s.col[1] = jargs["pos"].object_items().at("y").number_value();
+        }
+        if (jargs["pos"].object_items().count("z") && jargs["pos"].object_items().at("z").is_number())
+        {
+            desired_swarm_state.ref_location.s.col[2] = jargs["pos"].object_items().at("z").number_value();
+        }
+    }
+    setSwarmPositions();
+
+    return 0;
+}
+
+int32_t request_node_state(string &request, string &response, Agent*)
+{
     vector<string> args = string_split(request);
     response.clear();
 
@@ -155,38 +264,10 @@ int32_t request_set_swarm_formation(string &request, string &response, Agent*)
         response = "Error: Not enough arguments";
         return 0;
     }
-    string estring;
-    json11::Json jargs = json11::Json::parse(args[1], estring);
-    if (!estring.empty())
-    {
-        response = "Error: Invalid JSON format in arguments";
-        return 0;
-    }
-    if (!jargs.is_object())
-    {
-        response = "Error: Arguments should be a JSON object";
-        return 0;
-    }
-    if (!jargs["shape"].is_string() || !jargs["sep"].is_number())
-    {
-        response = "Error: Invalid object in arguments";
-        return 0;
-    }
-    string shape = jargs["shape"].string_value();
-    double sep = jargs["sep"].number_value();
-    if (swarm_formation_type_map.find(shape) == swarm_formation_type_map.end())
-    {
-        response = "Error: Invalid formation shape: " + shape;
-        return 0;
-    }
-    if (sep <= 0)
-    {
-        response = "Error: Separation must be a positive number! Got: " + std::to_string(sep);
-        return 0;
-    }
-    desired_swarm_state.formation_type = swarm_formation_type_map[shape];
-    desired_swarm_state.separation = sep;
-    setSwarmPositions();
+    NodeState node_state;
+    node_state.from_json(args[1]);
+    
+    // setSwarmPositions();
 
     return 0;
 }

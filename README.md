@@ -43,3 +43,18 @@ Initial work performed by **RI** for STTR Phase 2E.
 1. IMU-based angle estimation drifts over time
 2. UWB sensors may ocassionally require a restart (unplug/replug)
 3. If UWB sensors stop receiving telemetry: reinitialize by running /position_estimation/uwb.py
+
+
+## Configure & Build
+This repo uses CMakePresets for its build configurations.
+
+See the available presets by running the following in the root folder of the project:
+```
+cmake --list-presets
+cmake --build --list-presets
+```
+Example configuration and build for the `linux-debug` preset:
+```
+cmake --preset linux-debug
+cmake --build --preset linux-debug -j4
+```
