@@ -33,12 +33,15 @@ Initial work performed by **RI** for STTR Phase 2E.
 
 📖 Full guide: [Precise Real-Time Indoor Localization with Raspberry Pi and UWB](https://medium.com/@newforestberlin/precise-realtime-indoor-localization-with-raspberry-pi-and-ultra-wideband-technology-decawave-191e4e2daa8c) 
 
-### Swarm Controller (for programs in /commands)
+## Run Instructions
+0. Login to the GUI for the RPI OS and configure the AlphaBots to the same Wi-Fi. Note their ip addresses.
 1. Compile: make swarm_child.cpp and swarm_controller
-2. Run ./swarm_controller on all robots 
-3. Run ./swarm_child on all robots
+2. Run `./swarm_child '{"nodename":"child_XX"}` on all robots, where XX is from 01-03.
+3. Run `sudo python3 position_udp_main.py` on all robots (requires restarting once on first run after reboot)
+4. Run `./swarm_controller` on a computer on the same network as the AlphaBots.
+5. Run the `control_demo.sh` script.
 
-**Note:** For more ideal trajectories, all robots must be setup starting at 0 degrees (facing +x-direction) 
+**Note:** For more ideal initial trajectories, all robots should be setup starting at 0 degrees (facing +x-direction) 
 
 ---
 
@@ -46,17 +49,18 @@ Initial work performed by **RI** for STTR Phase 2E.
 1. ssh_keyboard_drive.py: Control robot with WASD
 2. imu.py: Reads orientation data using IMU 
 3. uwb.py: Reads x,y position data using UWB sensors
-4. positions_udp_main.py: Receives x,y position commands via UDP
-5. vector_udp_main.py: Receives x,y vector commands via UDP
+4. position_udp_main.py: Main driver code
 
-### Known Limitations:
-1. IMU-based angle estimation drifts over time
-2. UWB sensors may ocassionally require a restart (unplug/replug)
-3. If UWB sensors stop receiving telemetry: reinitialize by running /position_estimation/uwb.py
+### Known Limitations and Issues:
+1. On running position_upd_main.py for the first time on RPI boot, you'll notice it starts spinning after receiving a position command. After stopping the script and restarting, this problem with the IMU will not appear again until another reboot.
+2. UWB sensors may ocassionally go down and require a restart (unplug/replug)
+3. Velocity is fixed during movement.
 
-1. Must initialize UWB sensors by running /position_estimation/uwb.py before running any code
-2. IMU-based angle estimation drifts over time
-3. UWB sensors may ocassionally go down and require a restart (unplug/replug)
+### Future work:
+1. Re-incorporate Madgwick filter and EKF back into positioning code.
+2. Consider increasing robot velocity.
+3. Implement fine-grained convergence to target position.
+
 
 ## Configure & Build
 This repo uses CMakePresets for its build configurations.
@@ -70,6 +74,12 @@ Example configuration and build for the `linux-debug` preset:
 ```
 cmake --preset linux-debug
 cmake --build --preset linux-debug -j4
+```
+Example configuration and build for the `rpi-debug` preset:
+See the section below for installing the RPI cross-compiler first before building for RPI.
+```
+cmake --preset rpi-debug
+cmake --build --preset rpi-debug -j4
 ```
 
 # Installing the RPI Cross-compiler
