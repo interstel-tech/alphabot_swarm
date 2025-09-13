@@ -3,7 +3,7 @@
 # -----------------------------------------------
 # COSMOS sttr2020 Dependency
 if (NOT DEFINED COSMOS_STTR2020_GIT_TAG)
-    set(COSMOS_STTR2020_GIT_TAG "feature/swarm_controller")
+    set(COSMOS_STTR2020_GIT_TAG 18492b6db37f1a938e5)
     message("COSMOS_STTR2020_GIT_TAG not defined, using default git tag: \"${COSMOS_STTR2020_GIT_TAG}\"")
 endif()
 include(FetchContent)
