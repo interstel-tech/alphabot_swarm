@@ -2,6 +2,7 @@ import math
 import hid
 import time
 import numpy as np
+from ahrs.filters import Madgwick
 
 def read_word(driver, addr, high_reg, low_reg):
     high = driver.read_byte_data(addr, high_reg)
@@ -34,7 +35,7 @@ def convert_units(accel_raw, gyro_raw):
     az = (accel_raw["z"] / ACCEL_SCALE) * GRAVITY
     gx = math.radians(gyro_raw["x"] / GYRO_SCALE)
     gy = math.radians(gyro_raw["y"] / GYRO_SCALE)
-    gz = math.radians(gyro_raw["z"] / GYRO_SCALE) + 0.019
+    gz = math.radians(gyro_raw["z"] / GYRO_SCALE) + 0.016
     return np.array([ax, ay, az]), np.array([gx, gy, gz])
 
 def quaternion_to_yaw(q):

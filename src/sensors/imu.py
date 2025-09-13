@@ -134,7 +134,7 @@ def convert_imu_data(accel_raw, gyro_raw):
     ay = (accel_raw['accel_y'] / ACCEL_SCALE_MODIFIER) * GRAVITY
     az = (accel_raw['accel_z'] / ACCEL_SCALE_MODIFIER) * GRAVITY
 
-    gx = gyro_raw['gyro_x'] / GYRO_SCALE_MODIFIER + 1.1
+    gx = gyro_raw['gyro_x'] / GYRO_SCALE_MODIFIER + 1.3
     gy = gyro_raw['gyro_y'] / GYRO_SCALE_MODIFIER
     gz = gyro_raw['gyro_z'] / GYRO_SCALE_MODIFIER
 
