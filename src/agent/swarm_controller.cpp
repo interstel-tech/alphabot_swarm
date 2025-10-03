@@ -30,6 +30,10 @@ namespace
 
     //! Keep track of which nodes have reported back their state within the current time window
     // int nodes_reported = 0;
+
+    //! If set, log node states to a file
+    bool log_to_file = false;
+    std::ofstream log_file;
 }
 
 // ==========================================================================
@@ -65,8 +69,34 @@ int32_t request_node_state(string &request, string &response, Agent *agent);
 
 // ==========================================================================
 // Entrypoint
-int main()
+int main(int argc, char *argv[])
 {
+    std::vector<std::string> args(argv, argv + argc);
+    for (uint32_t i=1; i<args.size(); ++i)
+    {
+        if (args[i] == "--help" || args[i] == "-h") {
+            cout << "Usage: swarm_controller [options]" << endl;
+            cout << "Options:" << endl;
+            cout << "  --help, -h          Show this help message" << endl;
+            cout << "  --log, -l           Log node states to a file (swarm_controller_log.txt)" << endl;
+            return 0;
+        }
+        else if (args[i] == "--log" || args[i] == "-l")
+        {
+            log_to_file = true;
+            log_file.open("swarm_controller_log.txt", std::ios::out | std::ios::app);
+            if (!log_file.is_open())
+            {
+                cerr << "Failed to open log file" << endl;
+                exit(-1);
+            }
+        }
+        else {
+            cerr << "Unknown argument: " << args[i] << endl;
+            cerr << "Use --help or -h for usage information." << endl;
+            exit(-1);
+        }
+    }
     initSwarmObjects();
     agent = new Agent(SWARM_REALM, SWARM_CONTROLLER_NODENAME, SWARM_CONTROLLER_AGENTNAME, 0.);
     agent->set_debug_level(0);
@@ -80,13 +110,20 @@ int main()
     agent->add_request("set_swarm_position", request_set_swarm_position, "'{\"angle\":0-360, \"pos\":{x:0,y:0,z:0}}'","Set the desired swarm position");
     agent->add_request("node_state", request_node_state, "'{\"nodename\":\"<nodename>\", \"lvlh\":{<cartpos>}}'","Update the state of a swarm node");
     agent->cinfo->agent0.aprd = .5;
+
     agent->start_active_loop();
+    cout << "Starting swarm controller" << endl;
     while (agent->running())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         // if (nodes_reported )
         setSwarmPositions();
     }
+    if (log_to_file)
+    {
+        log_file.close();
+    }
+    return 0;
 }
 
 // ==========================================================================
@@ -148,7 +185,6 @@ void convertFormationShapeToPositions()
 
 void setSwarmPositions()
 {
-    cout << "Setting new positions for the swarm..." << endl;
     convertFormationShapeToPositions();
     auto new_swarm_state = json11::Json(desired_swarm_positions);
     agent->post(Agent::AgentMessage::REQUEST, "desired_position_swarm " + new_swarm_state.dump());
@@ -205,6 +241,7 @@ int32_t request_set_swarm_formation(string &request, string &response, Agent*)
         double angle = jargs["angle"].number_value();
         desired_swarm_state.angle = angle;
     }
+    cout << "Setting new positions for the swarm..." << endl;
     setSwarmPositions();
 
     return 0;
@@ -253,6 +290,7 @@ int32_t request_set_swarm_position(string &request, string &response, Agent*)
             desired_swarm_state.ref_location.s.col[2] = jargs["pos"].object_items().at("z").number_value();
         }
     }
+    cout << "Setting new positions for the swarm..." << endl;
     setSwarmPositions();
 
     return 0;
@@ -278,6 +316,10 @@ int32_t request_node_state(string &request, string &response, Agent*)
         {
             swarm_positions[i] = node_state;
             cout << "Updated position for node " << node_state.nodename << ": " << node_state.lvlh.to_json().dump() << endl;
+            if (log_to_file)
+            {
+                log_file << arg << endl;
+            }
             return 0;
         }
     }

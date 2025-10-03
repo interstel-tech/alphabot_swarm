@@ -16,6 +16,7 @@ include(cmake/add-sttr2020-dependency.cmake)
 
 add_executable(swarm_child src/agent/swarm_child.cpp src/agent/swarm_params.h)
 target_link_libraries(swarm_child CosmosAgent Threads::Threads)
+
 add_executable(swarm_controller
     src/agent/swarm_controller.cpp
     src/agent/swarm_params.h

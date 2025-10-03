@@ -10,19 +10,34 @@ pause_for_key() {
     echo
 }
 
-agent main controller set_swarm_formation '{"shape":"line","sep":1.0}'
-agent main controller set_swarm_position '{"angle":0,"pos":{"x":2.0,"y":1.25}}'
+# Start from vertical line formation
+echo "Starting control demo..."
+echo "Starting in line formation"
+agent main controller set_swarm_formation '{"shape":"line","sep":0.75}'
+agent main controller set_swarm_position '{"angle":-90,"pos":{"x":0.5,"y":0.25}}'
 pause_for_key
-agent main controller set_swarm_position '{"angle":0,"pos":{"x":1.5,"y":0.75}}'
-agent main controller set_swarm_formation '{"shape":"ngon","sep":0.75}'
+# Move forward in a straight line
+echo "Moving forward in line formation"
+agent main controller set_swarm_position '{"angle":-90,"pos":{"x":1.5,"y":0.25}}'
 pause_for_key
-agent main controller set_swarm_position '{"angle":60,"pos":{"x":1.5,"y":0.75}}'
+# Move to triangle formation
+echo "Switching to triangle formation"
+agent main controller set_swarm_formation '{"shape":"ngon","sep":0.4}'
+agent main controller set_swarm_position '{"angle":-120,"pos":{"x":2.5,"y":1.0}}'
 pause_for_key
-agent main controller set_swarm_position '{"angle":120,"pos":{"x":1.5,"y":0.75}}'
+# Move forward
+echo "Moving forward in triangle formation"
+agent main controller set_swarm_position '{"angle":-120,"pos":{"x":3.0,"y":1.0}}'
 pause_for_key
-agent main controller set_swarm_position '{"angle":180,"pos":{"x":1.5,"y":0.75}}'
+# Move backward
+echo "Moving backward in triangle formation"
+agent main controller set_swarm_position '{"angle":-120,"pos":{"x":2.5,"y":1.0}}'
 pause_for_key
-agent main controller set_swarm_position '{"angle":180,"pos":{"x":2.0,"y":0.75}}'
+# Move into line formation
+echo "Switching back to line formation"
+agent main controller set_swarm_formation '{"shape":"line","sep":0.75}'
+agent main controller set_swarm_position '{"angle":-90,"pos":{"x":1.5,"y":0.25}}'
 pause_for_key
-agent main controller set_swarm_formation '{"shape":"line","sep":1.0}'
-agent main controller set_swarm_position '{"angle":0,"pos":{"x":2.0,"y":1.25}}'
+# Move backward in line formation
+echo "Moving backward in line formation"
+agent main controller set_swarm_position '{"angle":-90,"pos":{"x":0.5,"y":0.25}}'

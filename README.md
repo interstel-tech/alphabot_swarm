@@ -53,8 +53,9 @@ Initial work performed by **RI** for STTR Phase 2E.
 
 ### Known Limitations and Issues:
 1. On running position_upd_main.py for the first time on RPI boot, you'll notice it starts spinning after receiving a position command. After stopping the script and restarting, this problem with the IMU will not appear again until another reboot.
-2. UWB sensors may ocassionally go down and require a restart (unplug/replug)
+2. UWB sensors may occasionally go down and require a restart (unplug/replug)
 3. Velocity is fixed during movement.
+4. Optimal performance degrades rapidly due to short battery life.
 
 ### Future work:
 1. Re-incorporate Madgwick filter and EKF back into positioning code.
@@ -63,6 +64,12 @@ Initial work performed by **RI** for STTR Phase 2E.
 
 
 ## Configure & Build
+First install the dependency packages:
+```
+sudo apt update
+sudo apt install -y libopenblas-dev
+```
+
 This repo uses CMakePresets for its build configurations.
 
 See the available presets by running the following in the root folder of the project:
